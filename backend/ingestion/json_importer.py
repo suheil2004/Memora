@@ -30,6 +30,12 @@ class JsonConversationImporter:
                 f"invalid JSON at line {exc.lineno}, column {exc.colno}: {exc.msg}"
             ) from exc
 
+        return self.import_data(raw, user_id=user_id)
+
+    def import_data(self, raw: Any, *, user_id: str) -> tuple[ImportedConversation, ...]:
+        """Normalize an already-decoded JSON value using the file import rules."""
+        if not user_id.strip():
+            raise ConversationImportError("user_id cannot be blank")
         data = _require_object(raw, "root")
         conversation_id = _required_text(data, "conversation_id")
         title = _optional_text(data, "title")
@@ -110,4 +116,3 @@ def _optional_datetime(
     if parsed.tzinfo is None:
         raise ConversationImportError(f"{location}.{key} must include a timezone")
     return parsed
-

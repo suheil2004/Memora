@@ -1,4 +1,3 @@
 # API
 
-The API will compose implementations and expose import, retrieval, inspection, and deletion endpoints. No web framework is selected in this scaffold.
-
+The FastAPI application in `backend.api.app` exposes health, conversation import/indexing, and compact context retrieval. Routes delegate to `MemoraService`; they do not duplicate RAG logic.

@@ -7,7 +7,12 @@ name = "memora-backend"
 version = "0.1.0"
 description = "Personalized memory and retrieval layer for AI chat applications"
 requires-python = ">=3.11"
-dependencies = ["openai>=1.0.0,<3"]
+dependencies = [
+    "fastapi>=0.115,<1",
+    "httpx>=0.27,<1",
+    "openai>=1.0.0,<3",
+    "uvicorn>=0.30,<1",
+]
 
 [tool.setuptools.packages.find]
 include = ["backend*"]

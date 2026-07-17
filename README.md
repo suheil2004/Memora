@@ -104,6 +104,60 @@ python -m scripts.evaluate_retrieval --provider both
 
 The script prints every query, expected topic, top-three results, similarity scores, pass/fail status, and aggregate Top-1 and Top-3 accuracy. Absolute scores across providers are not compared because they come from different embedding spaces.
 
+## Run the HTTP API
+
+Install the project dependencies as shown above, select an embedding provider, and start FastAPI locally:
+
+```powershell
+$env:MEMORA_EMBEDDING_PROVIDER = "local"
+$env:MEMORA_DATABASE_URL = "sqlite:///./memora.sqlite3"
+python -m uvicorn backend.api.app:app --host 127.0.0.1 --port 8000 --reload
+```
+
+OpenAI semantic mode uses the same API and pipeline:
+
+```powershell
+$env:MEMORA_EMBEDDING_PROVIDER = "openai"
+$env:OPENAI_API_KEY = "your-api-key"
+$env:OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+python -m uvicorn backend.api.app:app --host 127.0.0.1 --port 8000
+```
+
+Check health:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+```
+
+Import and index the drone sample:
+
+```powershell
+$conversation = Get-Content .\samples\drone_detection.json -Raw | ConvertFrom-Json
+$conversation | Add-Member -NotePropertyName user_id -NotePropertyValue "demo-user"
+$importBody = $conversation | ConvertTo-Json -Depth 10
+Invoke-RestMethod -Method Post `
+  -Uri http://127.0.0.1:8000/api/v1/conversations/import `
+  -ContentType "application/json" `
+  -Body $importBody
+```
+
+Retrieve compact context:
+
+```powershell
+$queryBody = @{
+  user_id = "demo-user"
+  query = "Where was I running the neural network again?"
+  top_k = 5
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post `
+  -Uri http://127.0.0.1:8000/api/v1/context/retrieve `
+  -ContentType "application/json" `
+  -Body $queryBody
+```
+
+`user_id` is an explicit request field only for the hackathon MVP. It is not authentication and must be replaced before production use. CORS defaults to local development origins only. Set `MEMORA_CORS_ORIGINS` to a comma-separated allowlist, including the exact `chrome-extension://...` origin once an unpacked extension ID is stable; never use `*` in production.
+
 ## Current status and limitations
 
 The core models distinguish original searchable conversation chunks from extracted durable memories. Python `Protocol` contracts keep providers and retrieval logic independent. The local hashes provide reproducible lexical similarity, while OpenAI embeddings support semantic retrieval. SQLite still performs an in-process linear scan, suitable only for the hackathon-scale demo. The extension remains an untouched shell with no DOM behavior.

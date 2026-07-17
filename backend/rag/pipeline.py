@@ -3,7 +3,7 @@
 from backend.database.sqlite_store import SQLiteVectorStore
 from backend.ingestion.chunker import ConversationChunker
 from backend.interfaces import EmbeddingService, ImportedConversation
-from backend.models import User
+from backend.models import ConversationChunk, User
 
 
 def index_conversation(
@@ -13,7 +13,7 @@ def index_conversation(
     chunker: ConversationChunker,
     embeddings: EmbeddingService,
     store: SQLiteVectorStore,
-) -> None:
+) -> tuple[ConversationChunk, ...]:
     store.save_import(user, imported)
     chunks = chunker.chunk(imported)
     vectors = embeddings.embed_documents([chunk.content for chunk in chunks])
@@ -23,3 +23,4 @@ def index_conversation(
         embedding_provider=embeddings.provider_name,
         embedding_model=embeddings.model_name,
     )
+    return chunks

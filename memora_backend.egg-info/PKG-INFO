@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: memora-backend
+Version: 0.1.0
+Summary: Personalized memory and retrieval layer for AI chat applications
+Requires-Python: >=3.11
+Requires-Dist: fastapi<1,>=0.115
+Requires-Dist: httpx<1,>=0.27
+Requires-Dist: openai<3,>=1.0.0
+Requires-Dist: uvicorn<1,>=0.30
