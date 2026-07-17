@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Memora",
+  "version": "0.1.0",
+  "description": "Makes relevant personal memory available to supported AI chats.",
+  "permissions": ["storage"],
+  "background": {
+    "service_worker": "dist/background.js",
+    "type": "module"
+  }
+}
+

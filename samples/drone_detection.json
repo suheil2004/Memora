@@ -1,0 +1,10 @@
+{
+  "conversation_id": "conv_drone_001",
+  "title": "Drone Detection Project",
+  "created_at": "2026-07-01T12:00:00Z",
+  "messages": [
+    {"role": "user", "content": "I am building a drone detection system."},
+    {"role": "assistant", "content": "What hardware are you using?"},
+    {"role": "user", "content": "A Raspberry Pi 4 streams the camera feed while my Windows laptop with CUDA runs inference."}
+  ]
+}

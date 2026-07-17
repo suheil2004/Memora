@@ -1,0 +1,10 @@
+{
+  "conversation_id": "conv_bread_001",
+  "title": "Weekend Sourdough",
+  "created_at": "2026-06-15T09:00:00Z",
+  "messages": [
+    {"role": "user", "content": "I bake sourdough bread on weekends and keep a rye starter."},
+    {"role": "assistant", "content": "Try a longer cold fermentation for a stronger flavor."},
+    {"role": "user", "content": "I prefer a crisp crust and an open crumb."}
+  ]
+}

@@ -1,0 +1,2 @@
+"""Executable Memora demo scripts."""
+
