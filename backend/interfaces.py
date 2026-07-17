@@ -23,6 +23,8 @@ class RetrievalResult:
     source_id: str
     conversation_id: str | None = None
     conversation_title: str | None = None
+    user_id: str | None = None
+    source_message_ids: tuple[str, ...] = ()
 
 
 class ConversationImporter(Protocol):

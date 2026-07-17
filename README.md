@@ -52,7 +52,7 @@ No environment values or API keys are needed. Future provider credentials belong
 
 ## Run the retrieval demo
 
-The demo imports both files in `samples/`, indexes them into a temporary SQLite database, runs the default latency query, and prints compact context:
+The demo imports both files in `samples/`, indexes them into a temporary SQLite database, runs the default latency query, and prints ranked chunks with scores, provenance, and compact context:
 
 ```powershell
 python -m scripts.demo_rag

@@ -51,6 +51,11 @@ class VerticalSliceTests(unittest.TestCase):
 
         self.assertEqual(results[0].conversation_id, "conv_drone_001")
         self.assertGreater(results[0].score, results[1].score)
+        self.assertEqual(results[0].user_id, user.id)
+        self.assertEqual(results[0].source_kind, "chunk")
+        self.assertTrue(results[0].source_id)
+        self.assertTrue(results[0].source_message_ids)
+        self.assertEqual(results[0].conversation_title, "Drone Detection Project")
         context = CompactContextBuilder().build("latency", results[:1], max_chars=500)
         self.assertIn("Drone Detection Project", context)
         self.assertIn("Raspberry Pi 4", context)
@@ -78,7 +83,7 @@ class VerticalSliceTests(unittest.TestCase):
     def test_missing_required_field_has_clear_error(self) -> None:
         path = Path(self.temp_dir.name) / "missing.json"
         path.write_text(json.dumps({"conversation_id": "c1", "messages": [{}]}), encoding="utf-8")
-        with self.assertRaisesRegex(ConversationImportError, "messages\[0\].role"):
+        with self.assertRaisesRegex(ConversationImportError, r"messages\[0\]\.role"):
             self.importer.import_file(path, user_id="user-one")
 
     def test_embeddings_are_deterministic(self) -> None:

@@ -42,6 +42,18 @@ def main() -> None:
     results = SemanticMemoryRetriever(embeddings, store).retrieve(
         args.query, user_id=user.id, limit=args.top_k, min_similarity=args.min_similarity
     )
+    print(f"Query: {args.query}\n")
+    print("Retrieval rankings:")
+    if not results:
+        print("  No chunks met the similarity threshold.")
+    for rank, result in enumerate(results, start=1):
+        print(
+            f"  {rank}. score={result.score:.4f} "
+            f"source={result.conversation_title or result.conversation_id} "
+            f"chunk_id={result.source_id}"
+        )
+        print(f"     message_ids={','.join(result.source_message_ids)}")
+    print("\nGenerated context:\n")
     print(CompactContextBuilder().build(args.query, results, max_chars=1200))
     if temporary is not None:
         temporary.cleanup()

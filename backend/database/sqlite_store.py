@@ -119,7 +119,8 @@ class SQLiteVectorStore:
             return ()
         with self._connection() as db:
             rows = db.execute(
-                """SELECT ch.id, ch.conversation_id, ch.content, ch.embedding, c.title
+                """SELECT ch.id, ch.conversation_id, ch.content, ch.embedding, c.title,
+                          ch.user_id, ch.message_ids
                    FROM chunks ch JOIN conversations c
                    ON c.id = ch.conversation_id AND c.user_id = ch.user_id
                    WHERE ch.user_id = ?""",
@@ -127,7 +128,7 @@ class SQLiteVectorStore:
             ).fetchall()
         ranked = []
         seen: set[str] = set()
-        for chunk_id, conversation_id, content, raw_embedding, title in rows:
+        for chunk_id, conversation_id, content, raw_embedding, title, row_user_id, message_ids in rows:
             duplicate_key = " ".join(content.lower().split())
             if duplicate_key in seen:
                 continue
@@ -136,7 +137,16 @@ class SQLiteVectorStore:
                 continue
             seen.add(duplicate_key)
             ranked.append(
-                RetrievalResult(content, score, "chunk", chunk_id, conversation_id, title)
+                RetrievalResult(
+                    content,
+                    score,
+                    "chunk",
+                    chunk_id,
+                    conversation_id,
+                    title,
+                    row_user_id,
+                    tuple(json.loads(message_ids)),
+                )
             )
         ranked.sort(key=lambda result: (-result.score, result.source_id))
         return tuple(ranked[:limit])
