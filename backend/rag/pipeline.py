@@ -17,5 +17,9 @@ def index_conversation(
     store.save_import(user, imported)
     chunks = chunker.chunk(imported)
     vectors = embeddings.embed_documents([chunk.content for chunk in chunks])
-    store.upsert(chunks, vectors)
-
+    store.upsert(
+        chunks,
+        vectors,
+        embedding_provider=embeddings.provider_name,
+        embedding_model=embeddings.model_name,
+    )

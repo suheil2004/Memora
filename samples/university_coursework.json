@@ -1,0 +1,10 @@
+{
+  "conversation_id": "conv_coursework_001",
+  "title": "University Coursework",
+  "created_at": "2026-05-20T14:00:00Z",
+  "messages": [
+    {"role": "user", "content": "My database systems course requires a final project about transaction isolation and query optimization."},
+    {"role": "assistant", "content": "A small benchmark comparing index strategies would make a concrete report."},
+    {"role": "user", "content": "The report is due Friday, and our group presents the following Monday."}
+  ]
+}

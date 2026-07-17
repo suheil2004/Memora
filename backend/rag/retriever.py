@@ -24,6 +24,7 @@ class SemanticMemoryRetriever:
                 user_id=user_id,
                 limit=limit,
                 min_similarity=min_similarity,
+                embedding_provider=self.embeddings.provider_name,
+                embedding_model=self.embeddings.model_name,
             )
         )
-

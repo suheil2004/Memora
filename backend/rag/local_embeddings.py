@@ -22,6 +22,14 @@ class LocalHashEmbeddingService:
             raise ValueError("dimensions must be at least 8")
         self.dimensions = dimensions
 
+    @property
+    def provider_name(self) -> str:
+        return "local"
+
+    @property
+    def model_name(self) -> str:
+        return f"feature-hash-v1-{self.dimensions}"
+
     def embed_documents(self, texts: Sequence[str]) -> tuple[Embedding, ...]:
         return tuple(self._embed(text) for text in texts)
 

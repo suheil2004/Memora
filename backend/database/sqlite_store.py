@@ -13,6 +13,10 @@ from backend.interfaces import Embedding, ImportedConversation, RetrievalResult
 from backend.models import ConversationChunk, User
 
 
+class IncompatibleEmbeddingError(ValueError):
+    """Stored vectors do not match the active embedding space."""
+
+
 class SQLiteVectorStore:
     def __init__(self, path: Path | str) -> None:
         self.path = str(path)
@@ -53,13 +57,21 @@ class SQLiteVectorStore:
                 CREATE TABLE IF NOT EXISTS chunks (
                     id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, user_id TEXT NOT NULL,
                     content TEXT NOT NULL, ordinal INTEGER NOT NULL, message_ids TEXT NOT NULL,
-                    embedding TEXT NOT NULL, created_at TEXT NOT NULL,
+                    embedding TEXT NOT NULL, embedding_provider TEXT NOT NULL,
+                    embedding_model TEXT NOT NULL, created_at TEXT NOT NULL,
                     FOREIGN KEY (conversation_id, user_id)
                     REFERENCES conversations(id, user_id) ON DELETE CASCADE
                 );
                 CREATE INDEX IF NOT EXISTS idx_chunks_user ON chunks(user_id);
                 """
             )
+            columns = {row[1] for row in db.execute("PRAGMA table_info(chunks)")}
+            if "embedding_provider" not in columns:
+                db.execute("ALTER TABLE chunks ADD COLUMN embedding_provider TEXT")
+                db.execute("UPDATE chunks SET embedding_provider = 'legacy-unknown'")
+            if "embedding_model" not in columns:
+                db.execute("ALTER TABLE chunks ADD COLUMN embedding_model TEXT")
+                db.execute("UPDATE chunks SET embedding_model = 'legacy-unknown'")
 
     def save_import(self, user: User, imported: ImportedConversation) -> None:
         conversation = imported.conversation
@@ -90,18 +102,29 @@ class SQLiteVectorStore:
                 ],
             )
 
-    def upsert(self, chunks: Sequence[ConversationChunk], embeddings: Sequence[Embedding]) -> None:
+    def upsert(
+        self,
+        chunks: Sequence[ConversationChunk],
+        embeddings: Sequence[Embedding],
+        *,
+        embedding_provider: str,
+        embedding_model: str,
+    ) -> None:
         if len(chunks) != len(embeddings):
             raise ValueError("each chunk must have exactly one embedding")
+        if not embedding_provider.strip() or not embedding_model.strip():
+            raise ValueError("embedding provider and model metadata are required")
         with self._connection() as db:
             db.executemany(
                 """INSERT OR REPLACE INTO chunks
-                   (id, conversation_id, user_id, content, ordinal, message_ids, embedding, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (id, conversation_id, user_id, content, ordinal, message_ids, embedding,
+                    embedding_provider, embedding_model, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 [
                     (
                         chunk.id, chunk.conversation_id, chunk.user_id, chunk.content, chunk.ordinal,
-                        json.dumps(chunk.message_ids), json.dumps(embedding), chunk.created_at.isoformat(),
+                        json.dumps(chunk.message_ids), json.dumps(embedding), embedding_provider,
+                        embedding_model, chunk.created_at.isoformat(),
                     )
                     for chunk, embedding in zip(chunks, embeddings)
                 ],
@@ -114,10 +137,27 @@ class SQLiteVectorStore:
         user_id: str,
         limit: int,
         min_similarity: float = 0.0,
+        embedding_provider: str,
+        embedding_model: str,
     ) -> tuple[RetrievalResult, ...]:
         if limit < 1:
             return ()
         with self._connection() as db:
+            identities = db.execute(
+                """SELECT DISTINCT embedding_provider, embedding_model
+                   FROM chunks WHERE user_id = ?""",
+                (user_id,),
+            ).fetchall()
+            incompatible = [
+                identity for identity in identities
+                if identity != (embedding_provider, embedding_model)
+            ]
+            if incompatible:
+                found = ", ".join(f"{provider}/{model}" for provider, model in incompatible)
+                raise IncompatibleEmbeddingError(
+                    "stored vectors use incompatible embedding metadata "
+                    f"({found}); re-index with {embedding_provider}/{embedding_model}"
+                )
             rows = db.execute(
                 """SELECT ch.id, ch.conversation_id, ch.content, ch.embedding, c.title,
                           ch.user_id, ch.message_ids

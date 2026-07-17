@@ -5,6 +5,7 @@
   "messages": [
     {"role": "user", "content": "I am building a drone detection system."},
     {"role": "assistant", "content": "What hardware are you using?"},
-    {"role": "user", "content": "A Raspberry Pi 4 streams the camera feed while my Windows laptop with CUDA runs inference."}
+    {"role": "user", "content": "A Raspberry Pi 4 streams the camera feed while my Windows laptop with CUDA runs inference."},
+    {"role": "assistant", "content": "The pan-tilt mount can follow the detected aircraft by aiming the camera."}
   ]
 }

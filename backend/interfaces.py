@@ -32,13 +32,26 @@ class ConversationImporter(Protocol):
 
 
 class EmbeddingService(Protocol):
+    @property
+    def provider_name(self) -> str: ...
+
+    @property
+    def model_name(self) -> str: ...
+
     def embed_documents(self, texts: Sequence[str]) -> Sequence[Embedding]: ...
 
     def embed_query(self, text: str) -> Embedding: ...
 
 
 class VectorStore(Protocol):
-    def upsert(self, chunks: Sequence[ConversationChunk], embeddings: Sequence[Embedding]) -> None: ...
+    def upsert(
+        self,
+        chunks: Sequence[ConversationChunk],
+        embeddings: Sequence[Embedding],
+        *,
+        embedding_provider: str,
+        embedding_model: str,
+    ) -> None: ...
 
     def search(
         self,
@@ -47,6 +60,8 @@ class VectorStore(Protocol):
         user_id: str,
         limit: int,
         min_similarity: float = 0.0,
+        embedding_provider: str,
+        embedding_model: str,
     ) -> Sequence[RetrievalResult]: ...
 
     def delete_conversation(self, conversation_id: str, *, user_id: str) -> None: ...
