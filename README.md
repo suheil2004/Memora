@@ -158,6 +158,59 @@ Invoke-RestMethod -Method Post `
 
 `user_id` is an explicit request field only for the hackathon MVP. It is not authentication and must be replaced before production use. CORS defaults to local development origins only. Set `MEMORA_CORS_ORIGINS` to a comma-separated allowlist, including the exact `chrome-extension://...` origin once an unpacked extension ID is stable; never use `*` in production.
 
+## Build and load the Chrome extension
+
+Requirements: Node.js 20+ with npm. The extension communicates only with a locally permitted Memora backend; it contains no OpenAI credential or RAG implementation.
+
+```powershell
+Set-Location extension
+npm install
+npm run test
+npm run typecheck
+npm run build
+```
+
+Then open Chrome → Extensions → enable Developer mode → Load unpacked → select `extension/dist`. Click the Memora toolbar icon to configure the backend URL and temporary demo user ID. The manifest permits only `127.0.0.1` and `localhost` HTTP backends; other hosts require an explicit manifest permission change and rebuild.
+
+The backend CORS allowlist can include the extension origin once Chrome assigns a stable ID:
+
+```powershell
+$env:MEMORA_CORS_ORIGINS = "http://localhost:3000,chrome-extension://YOUR_EXTENSION_ID"
+```
+
+### Manual hackathon demo
+
+1. Start the backend with OpenAI embeddings:
+
+   ```powershell
+   $env:MEMORA_EMBEDDING_PROVIDER = "openai"
+   $env:OPENAI_API_KEY = "your-api-key"
+   $env:OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+   $env:MEMORA_DATABASE_URL = "sqlite:///./memora.sqlite3"
+   python -m uvicorn backend.api.app:app --host 127.0.0.1 --port 8765
+   ```
+
+2. Import `samples/drone_detection.json` using the API commands above with `user_id` set to `demo-user`.
+3. Build and load `extension/dist` as an unpacked extension.
+4. Open `https://chatgpt.com/` and type, but do not submit: `Where was I running the neural network again?`
+5. Click **Retrieve memory** in the Memora panel.
+6. Confirm that the panel shows **Drone Detection Project**, its relevance score, and the Raspberry Pi/CUDA context.
+
+Retrieval happens only on that explicit click. The extension does not alter the draft, submit it, capture the conversation, or inject the returned context.
+
+### ChatGPT adapter selectors
+
+The adapter tries these selectors in order:
+
+```text
+#prompt-textarea
+textarea[data-id="root"]
+main form [contenteditable="true"][data-virtualkeyboard="true"]
+main form [contenteditable="true"]
+```
+
+ChatGPT's DOM is not a public stable API, so these selectors may require maintenance. All such assumptions are isolated in `extension/src/adapters/chatgpt-adapter.ts`.
+
 ## Current status and limitations
 
 The core models distinguish original searchable conversation chunks from extracted durable memories. Python `Protocol` contracts keep providers and retrieval logic independent. The local hashes provide reproducible lexical similarity, while OpenAI embeddings support semantic retrieval. SQLite still performs an in-process linear scan, suitable only for the hackathon-scale demo. The extension remains an untouched shell with no DOM behavior.

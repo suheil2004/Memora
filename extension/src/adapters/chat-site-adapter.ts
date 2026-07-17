@@ -1,7 +1,7 @@
 export interface ChatSiteAdapter {
   readonly id: string;
-  supports(location: Location): boolean;
-  getCurrentUserQuery(): string | null;
-  makeContextAvailable(context: string): Promise<void>;
+  isSupportedPage(location?: Location): boolean;
+  hasDraftInput(): boolean;
+  getCurrentDraftQuery(): string | null;
+  observeInputChanges(callback: (query: string | null) => void): () => void;
 }
-

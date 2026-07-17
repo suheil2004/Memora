@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Memora Settings</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <h1>Memora</h1>
+      <p>Local hackathon settings</p>
+      <form id="settings-form">
+        <label>Backend URL<input id="backend-url" type="url" required></label>
+        <label>Demo user ID<input id="user-id" type="text" required></label>
+        <button type="submit">Save</button>
+      </form>
+      <p id="status" role="status"></p>
+      <small>This user ID is not authentication.</small>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

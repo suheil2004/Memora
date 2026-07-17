@@ -1,0 +1,56 @@
+import type { ContextResponse, RetrieveRequest } from "./types";
+
+export class MemoraApiError extends Error {}
+
+export class MemoraApiClient {
+  constructor(
+    private readonly baseUrl: string,
+    private readonly fetchImpl: typeof fetch = fetch,
+  ) {}
+
+  async retrieve(request: RetrieveRequest): Promise<ContextResponse> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl.replace(/\/$/, "")}/api/v1/context/retrieve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+    } catch {
+      throw new MemoraApiError("Memora backend is unavailable. Check the URL and start the backend.");
+    }
+    if (!response.ok) {
+      const message = await safeErrorMessage(response);
+      throw new MemoraApiError(message || `Memora request failed (${response.status}).`);
+    }
+    const value: unknown = await response.json().catch(() => null);
+    if (!isContextResponse(value)) {
+      throw new MemoraApiError("Memora returned a malformed response.");
+    }
+    return value;
+  }
+}
+
+export function isContextResponse(value: unknown): value is ContextResponse {
+  if (!isRecord(value) || typeof value.query !== "string" || typeof value.context !== "string") return false;
+  if (!Array.isArray(value.results)) return false;
+  return value.results.every((result) =>
+    isRecord(result) &&
+    typeof result.user_id === "string" &&
+    typeof result.conversation_id === "string" &&
+    (typeof result.conversation_title === "string" || result.conversation_title === null) &&
+    typeof result.chunk_id === "string" &&
+    typeof result.score === "number" && Number.isFinite(result.score) &&
+    Array.isArray(result.source_message_ids) &&
+    result.source_message_ids.every((id) => typeof id === "string"),
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+async function safeErrorMessage(response: Response): Promise<string | null> {
+  const body: unknown = await response.json().catch(() => null);
+  return isRecord(body) && typeof body.detail === "string" ? body.detail : null;
+}

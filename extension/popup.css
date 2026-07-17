@@ -1,0 +1,6 @@
+body { margin: 0; width: 300px; background: #fafafa; color: #18181b; font: 14px/1.4 system-ui, sans-serif; }
+main { padding: 16px; } h1 { margin: 0; color: #2563eb; } p { color: #52525b; }
+label { display: block; margin: 12px 0; font-weight: 600; }
+input { box-sizing: border-box; width: 100%; margin-top: 5px; padding: 8px; border: 1px solid #d4d4d8; border-radius: 6px; }
+button { width: 100%; padding: 9px; border: 0; border-radius: 7px; background: #2563eb; color: white; font-weight: 650; }
+small { color: #71717a; }
