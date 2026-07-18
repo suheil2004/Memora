@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MemoraApiClient, MemoraApiError, isContextResponse } from "../src/api/memora-client";
 
@@ -14,6 +14,10 @@ const validResponse = {
     source_message_ids: ["message-1"],
   }],
 };
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("MemoraApiClient", () => {
   it("sends the retrieval request and parses a valid response", async () => {
@@ -47,6 +51,36 @@ describe("MemoraApiClient", () => {
         user_id: "u1", query: "query", top_k: 5,
       }),
     ).rejects.toBeInstanceOf(MemoraApiError);
+  });
+
+  it("binds the native fetch receiver before invoking it", async () => {
+    const receiverSensitiveFetch = vi.fn(function (this: unknown) {
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+      return Promise.resolve(new Response(JSON.stringify(validResponse), { status: 200 }));
+    }) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", receiverSensitiveFetch);
+
+    await expect(
+      new MemoraApiClient("http://127.0.0.1:8765").retrieve({
+        user_id: "demo-user", query: "query", top_k: 5,
+      }),
+    ).resolves.toEqual(validResponse);
+    expect(receiverSensitiveFetch).toHaveBeenCalledOnce();
+  });
+
+  it("classifies HTTP and malformed response failures", async () => {
+    const httpFetch = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ detail: "request rejected" }), { status: 503 }),
+    );
+    const invalidFetch = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ query: "q", context: "c", results: "bad" }), { status: 200 }),
+    );
+    await expect(
+      new MemoraApiClient("http://localhost:8765", httpFetch).retrieve({ user_id: "u", query: "q", top_k: 1 }),
+    ).rejects.toMatchObject({ code: "HTTP_ERROR" });
+    await expect(
+      new MemoraApiClient("http://localhost:8765", invalidFetch).retrieve({ user_id: "u", query: "q", top_k: 1 }),
+    ).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
   });
 });
 

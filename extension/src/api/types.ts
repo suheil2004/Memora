@@ -19,7 +19,14 @@ export interface RetrieveRequest {
   top_k: number;
 }
 
-export type BackgroundRequest = { type: "MEMORA_RETRIEVE"; query: string };
+export type BackgroundRequest = { type: "MEMORA_RETRIEVE_CONTEXT"; query: string };
+export type ExtensionErrorCode =
+  | "BACKEND_UNREACHABLE"
+  | "CORS_OR_PERMISSION_ERROR"
+  | "HTTP_ERROR"
+  | "INVALID_RESPONSE"
+  | "EXTENSION_MESSAGING_ERROR"
+  | "INTERNAL_ERROR";
 export type BackgroundResponse =
   | { ok: true; data: ContextResponse }
-  | { ok: false; error: string };
+  | { ok: false; error: { code: ExtensionErrorCode; message: string } };

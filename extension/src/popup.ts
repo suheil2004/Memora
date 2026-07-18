@@ -1,4 +1,5 @@
 import { DEFAULT_SETTINGS, loadSettings, saveSettings } from "./settings";
+import { MemoraApiClient } from "./api/memora-client";
 
 const form = document.querySelector<HTMLFormElement>("#settings-form");
 const backendUrl = document.querySelector<HTMLInputElement>("#backend-url");
@@ -15,12 +16,15 @@ form.addEventListener("submit", (event) => {
   event.preventDefault();
   void (async () => {
     try {
-      await saveSettings({
+      const settings = {
         backendUrl: backendUrl.value || DEFAULT_SETTINGS.backendUrl,
         userId: userId.value || DEFAULT_SETTINGS.userId,
         topK: DEFAULT_SETTINGS.topK,
-      });
-      status.textContent = "Settings saved.";
+      };
+      await saveSettings(settings);
+      status.textContent = "Testing local backend access…";
+      await new MemoraApiClient(settings.backendUrl).health();
+      status.textContent = "Settings saved. Backend connected.";
     } catch (error) {
       status.textContent = error instanceof Error ? error.message : "Unable to save settings.";
     }

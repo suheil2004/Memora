@@ -1,23 +1,23 @@
 import { ChatGptAdapter } from "./adapters/chatgpt-adapter";
-import type { BackgroundRequest, BackgroundResponse } from "./api/types";
+import { requestMemoraContext } from "./messaging";
 import { MemoraPanel } from "./panel";
 import { requireDraftQuery } from "./query";
+import { debug } from "./debug";
 
 const adapter = new ChatGptAdapter();
 let panel: MemoraPanel;
 
 async function retrieveMemory(): Promise<void> {
+  debug("CONTENT", "retrieve button clicked");
   try {
     if (!adapter.isSupportedPage()) throw new Error("This page is not supported by Memora.");
     if (!adapter.hasDraftInput()) throw new Error("ChatGPT input was not found. Reload the page and try again.");
     const query = requireDraftQuery(adapter.getCurrentDraftQuery());
+    debug("CONTENT", "extracted query", query);
     panel.showLoading();
-    const request: BackgroundRequest = { type: "MEMORA_RETRIEVE", query };
-    const response = (await chrome.runtime.sendMessage(request)) as BackgroundResponse | undefined;
-    if (!response || typeof response.ok !== "boolean") throw new Error("Memora returned a malformed extension response.");
-    if (!response.ok) throw new Error(response.error);
-    panel.showResults(response.data);
+    panel.showResults(await requestMemoraContext(query));
   } catch (error) {
+    debug("CONTENT", "retrieval error", error instanceof Error ? error.message : "unknown error");
     panel.showError(error instanceof Error ? error.message : "Unable to retrieve memory.");
   }
 }

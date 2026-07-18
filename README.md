@@ -172,6 +172,8 @@ npm run build
 
 Then open Chrome → Extensions → enable Developer mode → Load unpacked → select `extension/dist`. Click the Memora toolbar icon to configure the backend URL and temporary demo user ID. The manifest permits only `127.0.0.1` and `localhost` HTTP backends; other hosts require an explicit manifest permission change and rebuild.
 
+After loading or updating the extension, open its toolbar popup and click **Save** once while the backend is running. The popup performs a foreground `/health` check. On Chrome versions using Local Network Access permissions, this is where Chrome can ask you to allow access to the local backend; a background service worker cannot display that prompt by itself. Then reload the extension from `chrome://extensions` and retry retrieval if its files were rebuilt.
+
 The backend CORS allowlist can include the extension origin once Chrome assigns a stable ID:
 
 ```powershell
