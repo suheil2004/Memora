@@ -28,6 +28,26 @@ export class ChatGptAdapter implements ChatSiteAdapter {
     return this.findInput() !== null;
   }
 
+  setDraftQuery(text: string): boolean {
+    const input = this.findInput();
+    if (!input || !text.trim()) return false;
+    const previous = input instanceof HTMLTextAreaElement ? input.value : input.textContent ?? "";
+    try {
+      setInputValue(input, text);
+      dispatchDraftEvents(input, text);
+      input.focus();
+      moveCaretToEnd(input, this.documentRef);
+      if (this.getCurrentDraftQuery() === normalize(text)) return true;
+      setInputValue(input, previous);
+      dispatchDraftEvents(input, previous);
+      return false;
+    } catch {
+      setInputValue(input, previous);
+      dispatchDraftEvents(input, previous);
+      return false;
+    }
+  }
+
   observeInputChanges(callback: (query: string | null) => void): () => void {
     const onInput = () => callback(this.getCurrentDraftQuery());
     this.documentRef.addEventListener("input", onInput, true);
@@ -49,4 +69,42 @@ export class ChatGptAdapter implements ChatSiteAdapter {
     }
     return null;
   }
+}
+
+function dispatchDraftEvents(input: HTMLElement, text: string): void {
+  input.dispatchEvent(new InputEvent("input", {
+    bubbles: true,
+    composed: true,
+    inputType: "insertText",
+    data: text,
+  }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function setInputValue(input: HTMLElement, text: string): void {
+  if (input instanceof HTMLTextAreaElement) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    if (!setter) throw new Error("Textarea value setter is unavailable");
+    setter.call(input, text);
+    return;
+  }
+  input.textContent = text;
+}
+
+function moveCaretToEnd(input: HTMLElement, documentRef: Document): void {
+  if (input instanceof HTMLTextAreaElement) {
+    input.setSelectionRange(input.value.length, input.value.length);
+    return;
+  }
+  const selection = documentRef.getSelection();
+  if (!selection) return;
+  const range = documentRef.createRange();
+  range.selectNodeContents(input);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function normalize(value: string): string {
+  return value.replace(/\u00a0/g, " ").trim();
 }

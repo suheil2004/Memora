@@ -197,8 +197,10 @@ $env:MEMORA_CORS_ORIGINS = "http://localhost:3000,chrome-extension://YOUR_EXTENS
 4. Open `https://chatgpt.com/` and type, but do not submit: `Where was I running the neural network again?`
 5. Click **Retrieve memory** in the Memora panel.
 6. Confirm that the panel shows **Drone Detection Project**, its relevance score, and the Raspberry Pi/CUDA context.
+7. Click **Use this context** and confirm the compact context appears before the original ChatGPT question.
+8. Review the updated draft; ChatGPT does not submit it automatically.
 
-Retrieval happens only on that explicit click. The extension does not alter the draft, submit it, capture the conversation, or inject the returned context.
+Retrieval and insertion each require separate explicit clicks. The extension never submits the draft or captures the current conversation. If the draft changes after retrieval, Memora refuses insertion to protect the user's edits.
 
 ### ChatGPT adapter selectors
 
