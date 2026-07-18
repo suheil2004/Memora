@@ -1,4 +1,3 @@
 # Structured memory
 
-Durable facts are stored separately from raw conversation chunks, retain provenance, and support deduplication, inspection, and deletion.
-
+The domain models reserve a separate boundary for durable extracted facts. Structured-memory extraction, persistence, and retrieval are not implemented in the current MVP; active retrieval uses provenance-preserving raw conversation chunks only.

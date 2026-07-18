@@ -33,7 +33,13 @@ def main() -> None:
     store = SQLiteVectorStore(database)
 
     root = Path(__file__).resolve().parents[1]
-    for filename in ("drone_detection.json", "sourdough.json"):
+    for filename in (
+        "drone_detection.json",
+        "university_coursework.json",
+        "travel_planning.json",
+        "event_planning.json",
+        "sourdough.json",
+    ):
         imported = importer.import_file(root / "samples" / filename, user_id=user.id)[0]
         index_conversation(
             imported, user=user, chunker=chunker, embeddings=embeddings, store=store

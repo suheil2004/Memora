@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 .venv/
 __pycache__/
 *.py[cod]
@@ -6,10 +8,16 @@ __pycache__/
 .mypy_cache/
 node_modules/
 extension/dist/
+*.egg-info/
+*.db
+*.sqlite
 *.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
 conversations.json
 conversations-*.json
 conversations_*.json
 chatgpt-export*.zip
 *chatgpt*export*.zip
+*.zip
 !tests/fixtures/**/conversations.json

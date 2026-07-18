@@ -1,4 +1,3 @@
 # Database
 
-The first implementation should use SQLite repositories. Every operation must enforce `user_id` isolation and support source-based deletion.
-
+`SQLiteVectorStore` persists chunks, vectors, provider/model metadata, and import fingerprints. Search and replacement are scoped by `user_id`; cosine ranking is a linear scan suitable for the local MVP.

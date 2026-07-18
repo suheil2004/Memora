@@ -101,7 +101,7 @@ function friendlyImportError(error: unknown): string {
     setConnection("offline");
     return "Memora backend is offline. Start the local service and try again.";
   }
-  return message || "Couldn't import this export. Check the file and try again.";
+  return message || "Your ChatGPT history could not be imported. Check the selected export file.";
 }
 
 function required<T extends Element>(selector: string): T {

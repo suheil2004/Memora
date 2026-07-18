@@ -1,70 +1,77 @@
-# MVP architecture
+# Memora MVP Architecture
 
-## Why this shape
+Memora is a local modular monolith plus a thin Manifest V3 extension. This document describes the code that exists today; it is not a future architecture plan.
 
-A modular monolith is the shortest path to a reliable hackathon demo. The Python package owns ingestion, memory, retrieval, and persistence behind typed interfaces; one API process can compose them later. SQLite plus a replaceable vector-store implementation is sufficient for local demos. Vendor choices remain outside the domain layer so an embedding API or local model can be selected during the first vertical slice without rewriting ingestion.
-
-The extension is a thin client. Its site-specific behavior sits behind `ChatSiteAdapter`, and only one adapter will be implemented for the MVP. This prevents website DOM details from leaking into retrieval logic.
-
-## Data flow
+## Runtime components
 
 ```text
-User-provided export
-  -> ConversationImporter (parse and normalize)
-  -> Conversation + ordered Messages
-  -> chunker
-  -> ConversationChunks                 [raw conversation memory]
-  -> EmbeddingService -> VectorStore
-
-Conversation + Messages
-  -> MemoryExtractor
-  -> StructuredMemories                 [durable long-term memory]
-  -> structured-memory repository
-
-Current query from extension
-  -> backend retrieval endpoint
-  -> MemoryRetriever
-       -> semantic search over ConversationChunks
-       -> search StructuredMemories
-       -> rank + deduplicate + enforce user scope
-  -> ContextBuilder (relevance and size budget)
-  -> compact, attributed Memora context block
-  -> extension adapter makes it available to the active chat
+ChatGPT draft
+  -> content script / ChatGptAdapter
+  -> chrome.runtime message
+  -> background service worker
+  -> POST http://127.0.0.1:8765/api/v1/context/retrieve
+  -> FastAPI MemoraService
+  -> query embedding + user-scoped SQLite cosine search
+  -> ranked/deduplicated chunks + CompactContextBuilder
+  -> background response
+  -> Memora panel
+  -> explicit Use This Context action
+  -> updated draft (never auto-submitted)
 ```
 
-## Data boundaries
+The content script never calls the backend directly. Cross-origin HTTP runs in the service worker using manifest host permissions. API keys stay in the backend process.
 
-`ConversationChunk` is source text with conversation/message provenance and an ordinal. It supports semantic retrieval and deletion with its source conversation. `StructuredMemory` is an extracted durable statement with a category, confidence, provenance, and lifecycle status. A structured memory never replaces or mutates its raw source.
-
-All persisted entities are keyed by `user_id`. Implementations must filter by that key before ranking; filtering after vector retrieval risks cross-user disclosure. Context construction accepts an explicit character budget and emits provenance labels so results remain inspectable.
-
-## Proposed final MVP tree
+## Ingestion
 
 ```text
-memora/
-├── AGENTS.md
-├── README.md
-├── .env.example
-├── docs/architecture.md
-├── backend/
-│   ├── api/                 # routes, request/response schemas, composition root
-│   ├── ingestion/           # importers, cleaning, chunking
-│   ├── rag/                 # embeddings, vector retrieval, ranking, context
-│   ├── memory/              # extraction, categories, deduplication, management
-│   ├── database/            # SQLite schema and repositories
-│   ├── models.py
-│   └── settings.py
-├── extension/
-│   ├── src/adapters/        # interface + exactly one supported site
-│   ├── src/background.ts
-│   ├── src/content.ts
-│   ├── manifest.json
-│   └── package.json
-└── tests/
-    ├── ingestion/
-    ├── rag/
-    └── memory/
+User-selected ChatGPT JSON/ZIP
+  -> extension popup
+  -> POST /api/v1/import/chatgpt
+  -> ChatGPTExportImporter
+  -> normalized Conversation + ordered Messages
+  -> ConversationChunker
+  -> EmbeddingService
+  -> SQLiteVectorStore
 ```
 
-Empty implementation areas include a README so the intended boundary is visible until the next vertical slice fills it.
+ZIP entries are inspected in memory and are not extracted. The importer reconstructs the active branch of ChatGPT graph exports, accepts supported flat formats, skips unsupported content, and preserves source provenance. A user-scoped normalized fingerprint skips unchanged re-imports; changed conversations replace their prior chunks.
+
+The direct `POST /api/v1/conversations/import` endpoint accepts Memora's documented single-conversation JSON shape.
+
+## Raw conversation RAG
+
+`ConversationChunk` is the active retrieval unit. It retains user ID, conversation ID/title, chunk ID/ordinal, text, and source message IDs. Chunk text preserves message roles. Embeddings are created by either:
+
+- `OpenAIEmbeddingService` for semantic demo retrieval; or
+- `LocalHashEmbeddingService` for deterministic offline tests and a lexical baseline.
+
+The selected provider and model are stored with vectors. Memora rejects retrieval across incompatible vector spaces so changing provider/model requires re-indexing.
+
+`SQLiteVectorStore` filters by `user_id` before cosine ranking. `SemanticMemoryRetriever` applies the similarity threshold, ranking, limit, and deduplication. `CompactContextBuilder` prioritizes higher-ranked chunks and enforces a character budget.
+
+## Browser extension
+
+- `ChatGptAdapter` isolates ChatGPT DOM selectors and draft mutation.
+- `content.ts` owns explicit retrieve/use actions and panel state.
+- `messaging.ts` defines the content-to-background request path.
+- `background-listener.ts` keeps the asynchronous response channel open.
+- `background-handler.ts` loads settings, checks host permission, and invokes the API client.
+- `popup.ts` owns settings, health status, and explicit history import.
+
+Retrieval does not capture the current conversation, run automatically, inject automatically, or submit messages. If the draft changes after retrieval, insertion is refused to protect the user's edits.
+
+## Storage and privacy boundaries
+
+Every persisted conversation, chunk, fingerprint, and retrieval query is scoped by the explicit MVP `user_id`. That value is not authentication. Conversation content and embeddings are sensitive local data; the SQLite file is ignored by Git and should not be shared.
+
+The domain includes structured-memory models/interfaces as a future boundary, but the current vertical slice retrieves raw conversation chunks only. No structured-memory extraction or combined retrieval is active.
+
+## Operational limits
+
+- One local FastAPI process and SQLite database
+- Linear in-process vector scan
+- Synchronous import/indexing
+- One ChatGPT adapter with selectors that may require maintenance
+- Localhost backend permissions only
+- No authentication, encryption, background queue, cloud deployment, telemetry, or analytics
 

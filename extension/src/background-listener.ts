@@ -28,7 +28,9 @@ export function registerBackgroundListener(
     }
     debug("BACKGROUND", "payload validation passed");
     void handleBackgroundRequest(message, dependencies).then((response) => {
-      debug("BACKGROUND", response.ok ? "API response returned" : "error returned", response);
+      debug("BACKGROUND", response.ok ? "API response returned" : "error returned", {
+        ok: response.ok,
+      });
       sendResponse(response);
     });
     // Required for callback-style asynchronous responses in Manifest V3.

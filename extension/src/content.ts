@@ -28,10 +28,13 @@ async function retrieveMemory(): Promise<void> {
 
 function friendlyRetrievalError(error: unknown): string {
   const message = error instanceof Error ? error.message.toLowerCase() : "";
-  if (message.includes("backend") || message.includes("background service") || message.includes("could not reach")) {
-    return "Couldn't reach Memora. Check that the local backend is running.";
+  if (message.includes("background service")) {
+    return "Memora needs to be reloaded. Reload the extension, refresh ChatGPT, and try again.";
   }
-  return "Couldn't retrieve memory. Try again.";
+  if (message.includes("backend") || message.includes("could not reach")) {
+    return "Memora backend is offline. Start the local Memora service and try again.";
+  }
+  return "Memory retrieval failed. Try again.";
 }
 
 function useRetrievedContext(): void {

@@ -24,7 +24,7 @@ export async function requestMemoraContext(
       "Memora could not contact its background service. Reload the extension and refresh ChatGPT.",
     );
   }
-  debug("CONTENT", "runtime response received", response);
+  debug("CONTENT", "runtime response received", { ok: response?.ok === true });
   if (!response || typeof response.ok !== "boolean") {
     throw new ExtensionMessagingError("Memora received an invalid response from its background service.");
   }
