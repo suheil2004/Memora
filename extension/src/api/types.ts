@@ -14,7 +14,6 @@ export interface ContextResponse {
 }
 
 export interface RetrieveRequest {
-  user_id: string;
   query: string;
   top_k: number;
 }

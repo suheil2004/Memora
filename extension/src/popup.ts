@@ -1,10 +1,11 @@
 import { MemoraApiClient } from "./api/memora-client";
 import { renderImportError, renderImportSummary } from "./import-ui";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type MemoraSettings } from "./settings";
+import { MAX_IMPORT_FILES } from "./security";
 
 const form = required<HTMLFormElement>("#settings-form");
 const backendUrl = required<HTMLInputElement>("#backend-url");
-const userId = required<HTMLInputElement>("#user-id");
+const localToken = required<HTMLInputElement>("#local-token");
 const settingsButton = required<HTMLButtonElement>("#settings-submit");
 const status = required<HTMLElement>("#status");
 const connectionState = required<HTMLElement>("#connection-state");
@@ -16,7 +17,7 @@ const importStatus = required<HTMLElement>("#import-status");
 
 void loadSettings().then(async (settings) => {
   backendUrl.value = settings.backendUrl;
-  userId.value = settings.userId;
+  localToken.value = settings.localToken;
   await checkConnection(settings);
 });
 
@@ -30,12 +31,12 @@ form.addEventListener("submit", (event) => {
     try {
       await saveSettings({
         backendUrl: backendUrl.value || DEFAULT_SETTINGS.backendUrl,
-        userId: userId.value || DEFAULT_SETTINGS.userId,
+        localToken: localToken.value,
         topK: DEFAULT_SETTINGS.topK,
       });
       const settings = await loadSettings();
       backendUrl.value = settings.backendUrl;
-      userId.value = settings.userId;
+      localToken.value = settings.localToken;
       await checkConnection(settings, true);
     } catch {
       setConnection("offline");
@@ -56,13 +57,17 @@ importForm.addEventListener("submit", (event) => {
       renderImportError(importStatus, "Select a ChatGPT JSON or ZIP export first.");
       return;
     }
+    if (files.length > MAX_IMPORT_FILES) {
+      renderImportError(importStatus, `Select no more than ${MAX_IMPORT_FILES} export files at once.`);
+      return;
+    }
     importButton.disabled = true;
     importButton.textContent = "Importing...";
     importStatus.className = "importing";
     importStatus.textContent = "Importing and indexing your history. This may take a few minutes.";
     try {
       const settings = await loadSettings();
-      const summary = await new MemoraApiClient(settings.backendUrl).importChatGPTHistory(files, settings.userId);
+      const summary = await new MemoraApiClient(settings.backendUrl, settings.localToken).importChatGPTHistory(files);
       renderImportSummary(importStatus, summary);
       importFiles.value = "";
       setConnection("connected");
@@ -80,7 +85,7 @@ async function checkConnection(settings: MemoraSettings, saved = false): Promise
   status.className = "helper";
   status.textContent = saved ? "Settings saved. Checking connection..." : "";
   try {
-    await new MemoraApiClient(settings.backendUrl).health();
+    await new MemoraApiClient(settings.backendUrl, settings.localToken).health();
     setConnection("connected");
     status.textContent = saved ? "Settings saved. Memora is ready." : "";
   } catch {

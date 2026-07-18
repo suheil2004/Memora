@@ -22,12 +22,12 @@
         <form id="settings-form">
           <label for="backend-url">Backend URL</label>
           <input id="backend-url" type="url" autocomplete="url" required>
-          <label for="user-id">User ID</label>
-          <input id="user-id" type="text" autocomplete="username" required>
+          <label for="local-token">Local authentication token</label>
+          <input id="local-token" type="password" autocomplete="off" required>
           <button id="settings-submit" type="submit">Save settings</button>
         </form>
         <p id="status" class="helper" role="status" aria-live="polite"></p>
-        <p class="privacy-note">Local hackathon profile. This user ID is not authentication.</p>
+        <p class="privacy-note">Stored only in this Chrome profile. This is not your OpenAI API key.</p>
       </section>
       <section aria-labelledby="import-heading">
         <div class="section-heading"><h2 id="import-heading">Import memory</h2></div>

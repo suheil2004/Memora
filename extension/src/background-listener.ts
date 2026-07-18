@@ -1,6 +1,7 @@
 import type { BackgroundRequest, BackgroundResponse } from "./api/types";
 import { type BackgroundDependencies, handleBackgroundRequest } from "./background-handler";
 import { debug } from "./debug";
+import { MAX_QUERY_LENGTH } from "./security";
 
 export interface BackgroundRuntime {
   onMessage: {
@@ -40,9 +41,12 @@ export function registerBackgroundListener(
 }
 
 export function isRetrieveRequest(value: unknown): value is BackgroundRequest {
-  return typeof value === "object" && value !== null &&
-    (value as { type?: unknown }).type === "MEMORA_RETRIEVE_CONTEXT" &&
-    typeof (value as { query?: unknown }).query === "string";
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).length !== 2 || !("type" in record) || !("query" in record)) return false;
+  return record.type === "MEMORA_RETRIEVE_CONTEXT" &&
+    typeof record.query === "string" &&
+    record.query.trim().length > 0 && record.query.length <= MAX_QUERY_LENGTH;
 }
 
 function readMessageType(value: unknown): string | null {

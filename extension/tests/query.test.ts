@@ -11,4 +11,9 @@ describe("requireDraftQuery", () => {
   it("returns a trimmed non-empty draft", () => {
     expect(requireDraftQuery("  hello  ")).toBe("hello");
   });
+
+  it("rejects drafts above the retrieval limit", () => {
+    expect(requireDraftQuery("x".repeat(2000))).toHaveLength(2000);
+    expect(() => requireDraftQuery("x".repeat(2001))).toThrow("2,000");
+  });
 });

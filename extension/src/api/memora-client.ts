@@ -13,6 +13,7 @@ export class MemoraApiError extends Error {
 export class MemoraApiClient {
   constructor(
     private readonly baseUrl: string,
+    private readonly localToken: string,
     private readonly fetchImpl: typeof fetch = globalThis.fetch.bind(globalThis),
   ) {}
 
@@ -21,7 +22,10 @@ export class MemoraApiClient {
     try {
       response = await this.fetchImpl(`${this.baseUrl.replace(/\/$/, "")}/api/v1/context/retrieve`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${this.localToken}`,
+        },
         body: JSON.stringify(request),
       });
     } catch {
@@ -60,17 +64,17 @@ export class MemoraApiClient {
     }
   }
 
-  async importChatGPTHistory(files: readonly File[], userId: string): Promise<BulkImportSummary> {
+  async importChatGPTHistory(files: readonly File[]): Promise<BulkImportSummary> {
     if (files.length === 0) {
       throw new MemoraApiError("INVALID_RESPONSE", "Select at least one ChatGPT export file.");
     }
     const form = new FormData();
-    form.append("user_id", userId);
     for (const file of files) form.append("files", file, file.name);
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.baseUrl.replace(/\/$/, "")}/api/v1/import/chatgpt`, {
         method: "POST",
+        headers: { "Authorization": `Bearer ${this.localToken}` },
         body: form,
       });
     } catch {

@@ -12,7 +12,7 @@ class StrictModel(BaseModel):
 
 class MessageInput(StrictModel):
     role: Literal["user", "assistant", "system", "tool"]
-    content: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=20000)
     created_at: datetime | None = None
 
     @field_validator("content")
@@ -24,13 +24,12 @@ class MessageInput(StrictModel):
 
 
 class ConversationImportRequest(StrictModel):
-    user_id: str = Field(min_length=1)
-    conversation_id: str = Field(min_length=1)
-    title: str | None = None
+    conversation_id: str = Field(min_length=1, max_length=200)
+    title: str | None = Field(default=None, max_length=500)
     created_at: datetime | None = None
-    messages: list[MessageInput] = Field(min_length=1)
+    messages: list[MessageInput] = Field(min_length=1, max_length=500)
 
-    @field_validator("user_id", "conversation_id")
+    @field_validator("conversation_id")
     @classmethod
     def identifiers_not_blank(cls, value: str) -> str:
         if not value.strip():
@@ -47,13 +46,12 @@ class ImportResponse(StrictModel):
 
 
 class ContextRetrieveRequest(StrictModel):
-    user_id: str = Field(min_length=1)
-    query: str = Field(min_length=1)
-    top_k: int = Field(default=5, ge=1, le=50)
+    query: str = Field(min_length=1, max_length=2000)
+    top_k: int = Field(default=5, ge=1, le=10)
     min_similarity: float = Field(default=0.0, ge=-1.0, le=1.0)
     max_context_chars: int | None = Field(default=None, ge=64, le=50000)
 
-    @field_validator("user_id", "query")
+    @field_validator("query")
     @classmethod
     def text_not_blank(cls, value: str) -> str:
         if not value.strip():

@@ -23,11 +23,11 @@ function dependencies(fetchImpl: typeof fetch): BackgroundDependencies {
   return {
     loadSettings: async () => ({
       backendUrl: "http://127.0.0.1:8765",
-      userId: "demo-user",
+      localToken: "synthetic-memora-token-00000000000",
       topK: 5,
     }),
     hasHostPermission: async () => true,
-    createClient: (url) => new MemoraApiClient(url, fetchImpl),
+    createClient: (url, token) => new MemoraApiClient(url, token, fetchImpl),
   };
 }
 
@@ -46,10 +46,10 @@ describe("content-to-background retrieval messaging", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     const init = fetchMock.mock.calls[0]?.[1];
     expect(JSON.parse(String(init?.body))).toEqual({
-      user_id: "demo-user",
       query: "Where is inference running?",
       top_k: 5,
     });
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer synthetic-memora-token-00000000000");
   });
 
   it("propagates an unreachable-backend error through the service worker response", async () => {

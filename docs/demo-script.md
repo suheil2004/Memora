@@ -3,7 +3,7 @@
 ## Before presenting
 
 - Start the backend on `http://127.0.0.1:8765` with OpenAI embeddings.
-- Confirm the extension popup says **Connected** and uses `demo-user`.
+- Confirm the extension popup says **Connected** with the current Memora local token; the backend uses `MEMORA_USER_ID=demo-user`.
 - Index the synthetic samples and verify the drone query ranks correctly.
 - Open a clean ChatGPT conversation.
 
@@ -22,4 +22,3 @@
 11. Close with: “Memora gives AI continuity across conversations while keeping retrieval under explicit user control.”
 
 If retrieval fails, check the popup connection state, confirm the backend port is `8765`, then reload the extension and refresh ChatGPT.
-

@@ -1,42 +1,56 @@
+import { MAX_TOP_K, MIN_LOCAL_TOKEN_LENGTH, MIN_TOP_K, isAllowedBackendUrl } from "./security";
+
 export interface MemoraSettings {
   backendUrl: string;
-  userId: string;
+  localToken: string;
   topK: number;
 }
 
 export const DEFAULT_SETTINGS: MemoraSettings = {
   backendUrl: "http://127.0.0.1:8765",
-  userId: "demo-user",
+  localToken: "",
   topK: 5,
 };
 
 export async function loadSettings(): Promise<MemoraSettings> {
-  const stored = await chrome.storage.sync.get(["backendUrl", "userId", "topK"]);
-  const userId = typeof stored.userId === "string" ? stored.userId.trim() : "";
-  const topK = typeof stored.topK === "number" && Number.isInteger(stored.topK) && stored.topK > 0
+  const [stored, secrets] = await Promise.all([
+    chrome.storage.sync.get(["backendUrl", "topK"]),
+    chrome.storage.local.get(["localToken"]),
+  ]);
+  const topK = typeof stored.topK === "number" && Number.isInteger(stored.topK) &&
+      stored.topK >= MIN_TOP_K && stored.topK <= MAX_TOP_K
     ? stored.topK
     : DEFAULT_SETTINGS.topK;
   return {
     backendUrl: validBackendUrl(stored.backendUrl),
-    userId: userId || DEFAULT_SETTINGS.userId,
+    localToken: typeof secrets.localToken === "string" ? secrets.localToken : "",
     topK,
   };
 }
 
 export async function saveSettings(settings: MemoraSettings): Promise<void> {
-  await chrome.storage.sync.set({
-    backendUrl: normalizeBackendUrl(settings.backendUrl),
-    userId: settings.userId.trim(),
-    topK: settings.topK,
-  });
+  const token = settings.localToken.trim();
+  if (token.length < MIN_LOCAL_TOKEN_LENGTH) {
+    throw new Error(`Memora local token must be at least ${MIN_LOCAL_TOKEN_LENGTH} characters.`);
+  }
+  if (!Number.isInteger(settings.topK) || settings.topK < MIN_TOP_K || settings.topK > MAX_TOP_K) {
+    throw new Error(`Top K must be between ${MIN_TOP_K} and ${MAX_TOP_K}.`);
+  }
+  await Promise.all([
+    chrome.storage.sync.set({
+      backendUrl: normalizeBackendUrl(settings.backendUrl),
+      topK: settings.topK,
+    }),
+    chrome.storage.local.set({ localToken: token }),
+  ]);
 }
 
 export function normalizeBackendUrl(value: string): string {
   const url = new URL(value.trim());
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Backend URL must use http or https.");
+  if (!isAllowedBackendUrl(url.toString())) {
+    throw new Error("Backend URL must be http://127.0.0.1:8765 or http://localhost:8765.");
   }
-  return url.toString().replace(/\/$/, "");
+  return url.origin;
 }
 
 function validBackendUrl(value: unknown): string {

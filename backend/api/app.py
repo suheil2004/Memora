@@ -6,8 +6,9 @@ import os
 from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.schemas import (
@@ -19,6 +20,11 @@ from backend.api.schemas import (
     RetrievalResultResponse,
 )
 from backend.api.service import MemoraService
+from backend.api.security import (
+    InMemoryRateLimiter,
+    LocalSecurityConfig,
+    enforce_rate_limit,
+)
 from backend.database.sqlite_store import IncompatibleEmbeddingError, SQLiteVectorStore
 from backend.ingestion.chunker import ConversationChunker
 from backend.ingestion.json_importer import ConversationImportError, JsonConversationImporter
@@ -54,7 +60,12 @@ class ServiceContainer:
         return self._service
 
 
-def create_app(*, service_factory: Callable[[], MemoraService] = build_service) -> FastAPI:
+def create_app(
+    *,
+    service_factory: Callable[[], MemoraService] = build_service,
+    security_config: LocalSecurityConfig | None = None,
+    rate_limiter: InMemoryRateLimiter | None = None,
+) -> FastAPI:
     application = FastAPI(title="Memora API", version="1.0.0")
     origins = [
         origin.strip()
@@ -68,9 +79,11 @@ def create_app(*, service_factory: Callable[[], MemoraService] = build_service) 
         allow_origins=origins,
         allow_credentials=False,
         allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Authorization", "Content-Type"],
     )
     container = ServiceContainer(service_factory)
+    security = security_config or LocalSecurityConfig.from_environment()
+    limiter = rate_limiter or InMemoryRateLimiter()
 
     def service() -> MemoraService:
         try:
@@ -85,10 +98,20 @@ def create_app(*, service_factory: Callable[[], MemoraService] = build_service) 
         return {"status": "ok", "service": "memora"}
 
     @application.post("/api/v1/conversations/import", response_model=ImportResponse)
-    def import_conversation(request: ConversationImportRequest) -> ImportResponse:
+    def import_conversation(
+        request: ConversationImportRequest,
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> ImportResponse:
+        user_id = security.authenticate(authorization)
+        enforce_rate_limit(
+            limiter,
+            f"{user_id}:import",
+            limit=security.import_limit,
+            window_seconds=security.import_window_seconds,
+        )
         try:
-            payload = request.model_dump(mode="json", exclude={"user_id"})
-            summary = service().import_conversation(payload, user_id=request.user_id.strip())
+            payload = request.model_dump(mode="json")
+            summary = service().import_conversation(payload, user_id=user_id)
             return ImportResponse.model_validate(asdict(summary))
         except ConversationImportError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -98,18 +121,28 @@ def create_app(*, service_factory: Callable[[], MemoraService] = build_service) 
             raise HTTPException(status_code=500, detail="Conversation import failed") from exc
 
     @application.post("/api/v1/context/retrieve", response_model=ContextResponse)
-    def retrieve_context(request: ContextRetrieveRequest) -> ContextResponse:
+    def retrieve_context(
+        request: ContextRetrieveRequest,
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> ContextResponse:
+        user_id = security.authenticate(authorization)
+        enforce_rate_limit(
+            limiter,
+            f"{user_id}:retrieve",
+            limit=security.retrieval_limit,
+            window_seconds=security.retrieval_window_seconds,
+        )
         try:
             data = service().retrieve_context(
                 request.query.strip(),
-                user_id=request.user_id.strip(),
+                user_id=user_id,
                 top_k=request.top_k,
                 min_similarity=request.min_similarity,
                 max_context_chars=request.max_context_chars,
             )
             results = [
                 RetrievalResultResponse(
-                    user_id=result.user_id or request.user_id,
+                    user_id=result.user_id or user_id,
                     conversation_id=result.conversation_id or "",
                     conversation_title=result.conversation_title,
                     chunk_id=result.source_id,
@@ -128,13 +161,20 @@ def create_app(*, service_factory: Callable[[], MemoraService] = build_service) 
 
     @application.post("/api/v1/import/chatgpt", response_model=BulkImportResponse)
     async def import_chatgpt(
-        user_id: str = Form(..., min_length=1),
         files: list[UploadFile] = File(...),
+        authorization: Annotated[str | None, Header()] = None,
     ) -> BulkImportResponse:
-        if not user_id.strip():
-            raise HTTPException(status_code=422, detail="user_id cannot be blank")
+        user_id = security.authenticate(authorization)
         if not files:
             raise HTTPException(status_code=422, detail="at least one export file is required")
+        if len(files) > 10:
+            raise HTTPException(status_code=422, detail="at most 10 export files may be imported at once")
+        enforce_rate_limit(
+            limiter,
+            f"{user_id}:import",
+            limit=security.import_limit,
+            window_seconds=security.import_window_seconds,
+        )
         uploads: list[tuple[str, bytes]] = []
         total_bytes = 0
         try:
@@ -144,7 +184,7 @@ def create_app(*, service_factory: Callable[[], MemoraService] = build_service) 
                 if total_bytes > 250 * 1024 * 1024:
                     raise HTTPException(status_code=413, detail="uploaded export exceeds the size limit")
                 uploads.append((upload.filename or "upload", data))
-            summary = service().import_chatgpt_history(tuple(uploads), user_id=user_id.strip())
+            summary = service().import_chatgpt_history(tuple(uploads), user_id=user_id)
             return BulkImportResponse.model_validate(asdict(summary))
         except ChatGPTExportError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -24,13 +24,14 @@ describe("MemoraApiClient", () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify(validResponse), { status: 200 }),
     );
-    const client = new MemoraApiClient("http://127.0.0.1:8765/", fetchMock);
+    const client = new MemoraApiClient("http://127.0.0.1:8765/", "synthetic-token", fetchMock);
 
-    const result = await client.retrieve({ user_id: "demo-user", query: "query", top_k: 5 });
+    const result = await client.retrieve({ query: "query", top_k: 5 });
 
     expect(result).toEqual(validResponse);
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[0]?.[0]).toBe("http://127.0.0.1:8765/api/v1/context/retrieve");
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization")).toBe("Bearer synthetic-token");
   });
 
   it("rejects malformed responses", async () => {
@@ -38,8 +39,8 @@ describe("MemoraApiClient", () => {
       new Response(JSON.stringify({ context: 42 }), { status: 200 }),
     );
     await expect(
-      new MemoraApiClient("http://localhost:8765", fetchMock).retrieve({
-        user_id: "u1", query: "query", top_k: 5,
+      new MemoraApiClient("http://localhost:8765", "synthetic-token", fetchMock).retrieve({
+        query: "query", top_k: 5,
       }),
     ).rejects.toThrow("malformed response");
   });
@@ -47,8 +48,8 @@ describe("MemoraApiClient", () => {
   it("reports an unavailable backend without leaking fetch details", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error("socket secret"));
     await expect(
-      new MemoraApiClient("http://localhost:8765", fetchMock).retrieve({
-        user_id: "u1", query: "query", top_k: 5,
+      new MemoraApiClient("http://localhost:8765", "synthetic-token", fetchMock).retrieve({
+        query: "query", top_k: 5,
       }),
     ).rejects.toBeInstanceOf(MemoraApiError);
   });
@@ -61,8 +62,8 @@ describe("MemoraApiClient", () => {
     vi.stubGlobal("fetch", receiverSensitiveFetch);
 
     await expect(
-      new MemoraApiClient("http://127.0.0.1:8765").retrieve({
-        user_id: "demo-user", query: "query", top_k: 5,
+      new MemoraApiClient("http://127.0.0.1:8765", "synthetic-token").retrieve({
+        query: "query", top_k: 5,
       }),
     ).resolves.toEqual(validResponse);
     expect(receiverSensitiveFetch).toHaveBeenCalledOnce();
@@ -76,10 +77,10 @@ describe("MemoraApiClient", () => {
       new Response(JSON.stringify({ query: "q", context: "c", results: "bad" }), { status: 200 }),
     );
     await expect(
-      new MemoraApiClient("http://localhost:8765", httpFetch).retrieve({ user_id: "u", query: "q", top_k: 1 }),
+      new MemoraApiClient("http://localhost:8765", "synthetic-token", httpFetch).retrieve({ query: "q", top_k: 1 }),
     ).rejects.toMatchObject({ code: "HTTP_ERROR" });
     await expect(
-      new MemoraApiClient("http://localhost:8765", invalidFetch).retrieve({ user_id: "u", query: "q", top_k: 1 }),
+      new MemoraApiClient("http://localhost:8765", "synthetic-token", invalidFetch).retrieve({ query: "q", top_k: 1 }),
     ).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
   });
 
@@ -101,30 +102,30 @@ describe("MemoraApiClient", () => {
     const file = new File(["[]"], "conversations.json", { type: "application/json" });
 
     await expect(
-      new MemoraApiClient("http://127.0.0.1:8765", fetchMock)
-        .importChatGPTHistory([file], "demo-user"),
+      new MemoraApiClient("http://127.0.0.1:8765", "synthetic-token", fetchMock)
+        .importChatGPTHistory([file]),
     ).resolves.toEqual(summary);
 
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("http://127.0.0.1:8765/api/v1/import/chatgpt");
     expect(init?.method).toBe("POST");
-    expect(init?.headers).toBeUndefined();
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer synthetic-token");
     expect(init?.body).toBeInstanceOf(FormData);
     const body = init?.body as FormData;
-    expect(body.get("user_id")).toBe("demo-user");
+    expect(body.get("user_id")).toBeNull();
     expect((body.get("files") as File).name).toBe("conversations.json");
   });
 
   it("rejects empty file selections and malformed import summaries", async () => {
-    const client = new MemoraApiClient("http://127.0.0.1:8765", vi.fn<typeof fetch>());
-    await expect(client.importChatGPTHistory([], "demo-user")).rejects.toThrow("Select at least one");
+    const client = new MemoraApiClient("http://127.0.0.1:8765", "synthetic-token", vi.fn<typeof fetch>());
+    await expect(client.importChatGPTHistory([])).rejects.toThrow("Select at least one");
 
     const invalidFetch = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ conversations_found: "many" }), { status: 200 }),
     );
     await expect(
-      new MemoraApiClient("http://127.0.0.1:8765", invalidFetch)
-        .importChatGPTHistory([new File(["[]"], "conversations.json")], "demo-user"),
+      new MemoraApiClient("http://127.0.0.1:8765", "synthetic-token", invalidFetch)
+        .importChatGPTHistory([new File(["[]"], "conversations.json")]),
     ).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
   });
 });

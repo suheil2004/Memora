@@ -1,18 +1,19 @@
 import { MemoraApiClient, MemoraApiError } from "./api/memora-client";
 import type { BackgroundRequest, BackgroundResponse, ExtensionErrorCode } from "./api/types";
 import type { MemoraSettings } from "./settings";
-import { loadSettings } from "./settings";
+import { loadSettings, normalizeBackendUrl } from "./settings";
+import { MAX_TOP_K, MIN_LOCAL_TOKEN_LENGTH, MIN_TOP_K } from "./security";
 import { debug } from "./debug";
 
 export interface BackgroundDependencies {
   loadSettings: () => Promise<MemoraSettings>;
-  createClient: (backendUrl: string) => MemoraApiClient;
+  createClient: (backendUrl: string, localToken: string) => MemoraApiClient;
   hasHostPermission: (backendUrl: string) => Promise<boolean>;
 }
 
 const defaultDependencies: BackgroundDependencies = {
   loadSettings,
-  createClient: (backendUrl) => new MemoraApiClient(backendUrl),
+  createClient: (backendUrl, localToken) => new MemoraApiClient(backendUrl, localToken),
   hasHostPermission: async (backendUrl) => {
     const url = new URL(backendUrl);
     return chrome.permissions.contains({ origins: [`${url.protocol}//${url.hostname}/*`] });
@@ -26,6 +27,13 @@ export async function handleBackgroundRequest(
   debug("BACKGROUND", "handler entered");
   try {
     const settings = await dependencies.loadSettings();
+    normalizeBackendUrl(settings.backendUrl);
+    if (settings.localToken.trim().length < MIN_LOCAL_TOKEN_LENGTH) {
+      return failure("INTERNAL_ERROR", "Configure the Memora local token in extension settings.");
+    }
+    if (!Number.isInteger(settings.topK) || settings.topK < MIN_TOP_K || settings.topK > MAX_TOP_K) {
+      return failure("INTERNAL_ERROR", "Memora retrieval settings are invalid.");
+    }
     if (!(await dependencies.hasHostPermission(settings.backendUrl))) {
       return failure(
         "CORS_OR_PERMISSION_ERROR",
@@ -33,8 +41,7 @@ export async function handleBackgroundRequest(
       );
     }
     debug("BACKGROUND", "starting API request", { backendUrl: settings.backendUrl });
-    const data = await dependencies.createClient(settings.backendUrl).retrieve({
-      user_id: settings.userId,
+    const data = await dependencies.createClient(settings.backendUrl, settings.localToken).retrieve({
       query: message.query,
       top_k: settings.topK,
     });

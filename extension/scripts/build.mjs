@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { cp, mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,3 +26,15 @@ await Promise.all([
   cp(join(extensionRoot, "popup.html"), join(dist, "popup.html")),
   cp(join(extensionRoot, "popup.css"), join(dist, "popup.css")),
 ]);
+
+const configuredToken = process.env.MEMORA_LOCAL_TOKEN ?? "";
+for (const entry of await readdir(dist)) {
+  if (!/\.(?:js|map|html|json|css)$/.test(entry)) continue;
+  const content = await readFile(join(dist, entry), "utf8");
+  if (/OPENAI_API_KEY|sk-proj-|sk-/.test(content)) {
+    throw new Error(`Secret-like OpenAI credential pattern found in extension build file: ${entry}`);
+  }
+  if (configuredToken.length >= 16 && content.includes(configuredToken)) {
+    throw new Error(`Configured Memora local token found in extension build file: ${entry}`);
+  }
+}

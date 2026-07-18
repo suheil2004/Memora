@@ -9,6 +9,7 @@ ChatGPT draft
   -> content script / ChatGptAdapter
   -> chrome.runtime message
   -> background service worker
+  -> Authorization: Bearer <Memora local token>
   -> POST http://127.0.0.1:8765/api/v1/context/retrieve
   -> FastAPI MemoraService
   -> query embedding + user-scoped SQLite cosine search
@@ -19,7 +20,7 @@ ChatGPT draft
   -> updated draft (never auto-submitted)
 ```
 
-The content script never calls the backend directly. Cross-origin HTTP runs in the service worker using manifest host permissions. API keys stay in the backend process.
+The content script never calls the backend directly. Cross-origin HTTP runs in the service worker using manifest host permissions. Sensitive endpoints authenticate a dedicated local bearer token and derive database scope from server-side `MEMORA_USER_ID`. OpenAI keys stay in the backend process.
 
 ## Ingestion
 
@@ -58,11 +59,11 @@ The selected provider and model are stored with vectors. Memora rejects retrieva
 - `background-handler.ts` loads settings, checks host permission, and invokes the API client.
 - `popup.ts` owns settings, health status, and explicit history import.
 
-Retrieval does not capture the current conversation, run automatically, inject automatically, or submit messages. If the draft changes after retrieval, insertion is refused to protect the user's edits.
+Retrieval does not capture the current conversation, run automatically, inject automatically, or submit messages. If the draft changes after retrieval, insertion is refused to protect the user's edits. Inserted history is labeled untrusted reference data and enclosed in escaped `<historical_memory>` delimiters.
 
 ## Storage and privacy boundaries
 
-Every persisted conversation, chunk, fingerprint, and retrieval query is scoped by the explicit MVP `user_id`. That value is not authentication. Conversation content and embeddings are sensitive local data; the SQLite file is ignored by Git and should not be shared.
+Every persisted conversation, chunk, fingerprint, and retrieval query is scoped by the authenticated server-configured `MEMORA_USER_ID`; clients cannot choose it. The dedicated local token is a single-user hackathon control, not production authentication. Conversation content and embeddings are sensitive local data; the SQLite file is ignored by Git and should not be shared.
 
 The domain includes structured-memory models/interfaces as a future boundary, but the current vertical slice retrieves raw conversation chunks only. No structured-memory extraction or combined retrieval is active.
 
@@ -73,5 +74,6 @@ The domain includes structured-memory models/interfaces as a future boundary, bu
 - Synchronous import/indexing
 - One ChatGPT adapter with selectors that may require maintenance
 - Localhost backend permissions only
-- No authentication, encryption, background queue, cloud deployment, telemetry, or analytics
-
+- Dedicated local bearer authentication and in-process abuse limits; no production multi-user authentication
+- Query limit 2,000 characters, `top_k` 1–10, and at most 10 selected import files
+- No encryption, background queue, cloud deployment, telemetry, or analytics
