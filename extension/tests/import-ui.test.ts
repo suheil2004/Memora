@@ -20,9 +20,11 @@ describe("ChatGPT import status rendering", () => {
       duration_seconds: 1.25,
       errors: ["conversation 9: unsupported shape"],
     });
-    expect(target.textContent).toContain("Imported 8 of 10 conversations");
-    expect(target.textContent).toContain("42 messages, 12 chunks, 2 skipped (1.3s)");
+    expect(target.textContent).toContain("Import completed with skips");
+    expect(target.textContent).toContain("10 conversations found · 8 imported · 2 skipped");
+    expect(target.textContent).toContain("12 memory chunks indexed in 1.3s");
     expect(target.textContent).toContain("unsupported shape");
+    expect(target.className).toBe("partial");
   });
 
   it("replaces previous output with a useful import error", () => {
@@ -30,5 +32,6 @@ describe("ChatGPT import status rendering", () => {
     target.textContent = "old status";
     renderImportError(target, "The export could not be imported.");
     expect(target.textContent).toBe("The export could not be imported.");
+    expect(target.className).toBe("error");
   });
 });

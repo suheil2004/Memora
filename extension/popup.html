@@ -3,28 +3,43 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Memora Settings</title>
+    <title>Memora</title>
     <link rel="stylesheet" href="popup.css">
   </head>
   <body>
     <main>
-      <h1>Memora</h1>
-      <p>Local hackathon settings</p>
-      <form id="settings-form">
-        <label>Backend URL<input id="backend-url" type="url" required></label>
-        <label>Demo user ID<input id="user-id" type="text" required></label>
-        <button type="submit">Save</button>
-      </form>
-      <p id="status" role="status"></p>
-      <small>This user ID is not authentication.</small>
-      <hr>
-      <h2>Import ChatGPT history</h2>
-      <p>Select files from your ChatGPT data export. Files are sent only to your local Memora backend.</p>
-      <form id="import-form">
-        <label>Export files<input id="import-files" type="file" accept=".json,.zip,application/json,application/zip" multiple required></label>
-        <button id="import-submit" type="submit">Import ChatGPT History</button>
-      </form>
-      <div id="import-status" role="status"></div>
+      <header class="product-header">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div><h1>Memora</h1><p>Your memory layer for AI.</p></div>
+      </header>
+      <section aria-labelledby="connection-heading">
+        <div class="section-heading">
+          <h2 id="connection-heading">Connection</h2>
+          <span id="connection-state" class="status-pill checking" aria-live="polite">
+            <span aria-hidden="true"></span><span id="connection-label">Checking...</span>
+          </span>
+        </div>
+        <form id="settings-form">
+          <label for="backend-url">Backend URL</label>
+          <input id="backend-url" type="url" autocomplete="url" required>
+          <label for="user-id">User ID</label>
+          <input id="user-id" type="text" autocomplete="username" required>
+          <button id="settings-submit" type="submit">Save settings</button>
+        </form>
+        <p id="status" class="helper" role="status" aria-live="polite"></p>
+        <p class="privacy-note">Local hackathon profile. This user ID is not authentication.</p>
+      </section>
+      <section aria-labelledby="import-heading">
+        <div class="section-heading"><h2 id="import-heading">Import memory</h2></div>
+        <p class="section-copy">Import your ChatGPT data export to make previous conversations searchable through Memora.</p>
+        <form id="import-form">
+          <label for="import-files">ChatGPT export</label>
+          <input id="import-files" type="file" accept=".json,.zip,application/json,application/zip" multiple required>
+          <button id="import-submit" type="submit">Import history</button>
+        </form>
+        <div id="import-status" role="status" aria-live="polite"></div>
+        <p class="privacy-note">Your file is sent only to your local Memora backend.</p>
+      </section>
     </main>
     <script type="module" src="popup.js"></script>
   </body>

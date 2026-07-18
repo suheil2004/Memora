@@ -15,11 +15,16 @@ export class MemoraPanel {
     const root = host.attachShadow({ mode: "open" });
     root.innerHTML = `${STYLE}
       <section class="panel" aria-label="Memora relevant memory">
-        <header><strong>Memora</strong><span>Relevant Memory</span></header>
-        <button type="button" id="memora-retrieve">Retrieve memory</button>
-        <button type="button" id="memora-use-context" class="secondary" hidden>Use this context</button>
-        <p id="memora-status" role="status">Type a draft, then retrieve memory.</p>
-        <div id="memora-content"></div>
+        <header>
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div><strong>Memora</strong><span>Relevant memory</span></div>
+        </header>
+        <p id="memora-status" role="status" aria-live="polite">Relevant memory for your current question.</p>
+        <div id="memora-content" class="content"></div>
+        <div class="actions">
+          <button type="button" id="memora-use-context" hidden>Use this context</button>
+          <button type="button" id="memora-retrieve" class="secondary">Retrieve memory</button>
+        </div>
       </section>`;
     document.body.append(host);
     this.action = required(root, "#memora-retrieve", HTMLButtonElement);
@@ -34,18 +39,20 @@ export class MemoraPanel {
     this.action.dataset.draftAvailable = String(available);
   }
 
-  showIdle(message = "Type a draft, then retrieve memory."): void {
+  showIdle(message = "Relevant memory for your current question."): void {
+    this.action.textContent = "Retrieve memory";
     this.renderState("idle", message);
   }
 
   showLoading(): void {
     this.action.disabled = true;
     this.useAction.hidden = true;
-    this.renderState("loading", "Searching your memory…");
+    this.renderState("loading", "Searching your memory...");
   }
 
   showError(message: string): void {
     this.action.disabled = false;
+    this.action.textContent = "Try again";
     this.renderState("error", message);
   }
 
@@ -56,31 +63,36 @@ export class MemoraPanel {
 
   showContextUsed(alreadyInserted = false): void {
     this.useAction.hidden = true;
+    this.action.textContent = "Retrieve again";
     this.status.dataset.state = "results";
-    this.status.textContent = alreadyInserted ? "This context is already in the draft." : "Context added to the draft. Nothing was submitted.";
+    this.status.textContent = alreadyInserted
+      ? "This context is already in your draft."
+      : "Context added to your draft. Nothing was submitted.";
   }
 
   showResults(response: ContextResponse): void {
     this.action.disabled = false;
     if (response.results.length === 0 || !response.context.trim()) {
-      this.renderState("empty", "No relevant memory was found.");
+      this.action.textContent = "Retrieve again";
+      this.renderState("empty", "No relevant memory found. Try making your question a little more specific.");
       return;
     }
     const points = extractContextPoints(response.context);
     if (points.length === 0) {
-      this.renderState("empty", "No usable memory context was found.");
+      this.action.textContent = "Retrieve again";
+      this.renderState("empty", "No usable memory found. Try making your question a little more specific.");
       return;
     }
-    this.renderState("results", `${response.results.length} relevant source${response.results.length === 1 ? "" : "s"}.`);
-    for (const result of response.results) {
+    this.renderState("results", "Memory found for your current question.");
+    response.results.forEach((result, index) => {
       const card = document.createElement("article");
       const title = document.createElement("strong");
       title.textContent = result.conversation_title || "Previous conversation";
-      const score = document.createElement("span");
-      score.textContent = `Relevance: ${result.score.toFixed(3)}`;
-      card.append(title, score);
+      const relevance = document.createElement("span");
+      relevance.textContent = index === 0 ? "Top match" : "Related";
+      card.append(title, relevance);
       this.content.append(card);
-    }
+    });
     const list = document.createElement("ul");
     for (const point of points.slice(0, 8)) {
       const item = document.createElement("li");
@@ -89,6 +101,7 @@ export class MemoraPanel {
     }
     this.content.append(list);
     this.useAction.hidden = false;
+    this.action.textContent = "Retrieve again";
   }
 
   private renderState(state: PanelState, message: string): void {
@@ -106,12 +119,44 @@ function required<T extends Element>(root: ShadowRoot, selector: string, type: {
 }
 
 const STYLE = `<style>
-  :host { all: initial; }
-  .panel { position: fixed; right: 18px; bottom: 18px; z-index: 2147483647; width: 330px; max-height: 70vh; overflow: auto; box-sizing: border-box; padding: 14px; border: 1px solid #d4d4d8; border-radius: 12px; background: #fff; color: #18181b; box-shadow: 0 12px 32px rgba(0,0,0,.18); font: 14px/1.4 system-ui, sans-serif; }
-  header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; } header strong { font-size: 18px; color: #2563eb; } header span { color: #71717a; font-size: 12px; }
-  button { width: 100%; border: 0; border-radius: 8px; padding: 9px 12px; background: #2563eb; color: white; cursor: pointer; font-weight: 650; } button:disabled { opacity: .6; cursor: wait; }
-  button.secondary { margin-top: 8px; background: #18181b; }
-  p { margin: 10px 0 0; color: #52525b; } p[data-state="error"] { color: #b91c1c; } p[data-state="empty"] { color: #854d0e; }
-  article { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #e4e4e7; } article span { color: #71717a; font-size: 12px; white-space: nowrap; }
-  ul { margin: 10px 0 0; padding-left: 20px; } li { margin: 5px 0; }
+  :host {
+    all: initial;
+    --memora-bg: #ffffff;
+    --memora-surface: #f7f7f8;
+    --memora-text: #202124;
+    --memora-muted: #686b73;
+    --memora-border: #e3e4e8;
+    --memora-accent: #6256d9;
+    --memora-accent-hover: #5146c2;
+    --memora-danger: #a43d47;
+    --memora-warning: #8a641c;
+    --memora-radius: 14px;
+    --memora-space-1: 6px;
+    --memora-space-2: 10px;
+    --memora-space-3: 14px;
+    --memora-space-4: 18px;
+  }
+  * { box-sizing: border-box; }
+  .panel { position: fixed; right: 18px; bottom: 18px; z-index: 2147483647; width: min(356px, calc(100vw - 32px)); max-height: min(68vh, 620px); overflow: auto; padding: var(--memora-space-4); border: 1px solid var(--memora-border); border-radius: var(--memora-radius); background: var(--memora-bg); color: var(--memora-text); box-shadow: 0 16px 44px rgba(20, 20, 24, .14); font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: var(--memora-space-2); margin-bottom: var(--memora-space-3); }
+  header div { display: grid; min-width: 0; } header strong { font-size: 16px; line-height: 1.25; letter-spacing: -.01em; } header span { color: var(--memora-muted); font-size: 12px; }
+  .brand-mark { width: 10px; height: 10px; flex: 0 0 auto; border-radius: 50%; background: var(--memora-accent); box-shadow: 0 0 0 4px rgba(98, 86, 217, .12); }
+  .content { display: grid; gap: var(--memora-space-2); }
+  .actions { display: grid; gap: var(--memora-space-1); margin-top: var(--memora-space-3); }
+  button { width: 100%; min-height: 38px; border: 1px solid transparent; border-radius: 9px; padding: 8px 12px; background: var(--memora-accent); color: #fff; cursor: pointer; font: inherit; font-weight: 650; transition: background-color .15s ease, border-color .15s ease, transform .15s ease; }
+  button:hover:not(:disabled) { background: var(--memora-accent-hover); } button:active:not(:disabled) { transform: translateY(1px); }
+  button:focus-visible { outline: 3px solid rgba(98, 86, 217, .28); outline-offset: 2px; }
+  button:disabled { opacity: .55; cursor: wait; }
+  button.secondary { border-color: var(--memora-border); background: var(--memora-bg); color: var(--memora-text); font-weight: 600; }
+  button.secondary:hover:not(:disabled) { background: var(--memora-surface); border-color: #d2d4da; }
+  p { margin: 0 0 var(--memora-space-3); color: var(--memora-muted); overflow-wrap: anywhere; }
+  p[data-state="loading"]::before { content: ""; display: inline-block; width: 11px; height: 11px; margin-right: 8px; border: 2px solid var(--memora-border); border-top-color: var(--memora-accent); border-radius: 50%; vertical-align: -1px; animation: memora-spin .8s linear infinite; }
+  p[data-state="error"] { color: var(--memora-danger); } p[data-state="empty"] { color: var(--memora-warning); }
+  article { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--memora-space-2); padding: var(--memora-space-2) 0; border-top: 1px solid var(--memora-border); }
+  article strong { min-width: 0; overflow-wrap: anywhere; font-size: 13px; } article span { flex: 0 0 auto; border-radius: 999px; padding: 2px 7px; background: rgba(98, 86, 217, .1); color: #5146c2; font-size: 11px; font-weight: 650; white-space: nowrap; }
+  ul { margin: 0; padding: var(--memora-space-2) var(--memora-space-2) var(--memora-space-2) 25px; border-radius: 10px; background: var(--memora-surface); color: #393b40; }
+  li { margin: 5px 0; overflow-wrap: anywhere; }
+  @keyframes memora-spin { to { transform: rotate(360deg); } }
+  @media (max-width: 700px) { .panel { right: 10px; bottom: 10px; width: min(340px, calc(100vw - 20px)); max-height: 58vh; } }
+  @media (prefers-reduced-motion: reduce) { button { transition: none; } p[data-state="loading"]::before { animation: none; } }
 </style>`;

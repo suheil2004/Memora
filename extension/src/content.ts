@@ -22,8 +22,16 @@ async function retrieveMemory(): Promise<void> {
     panel.showResults(response);
   } catch (error) {
     debug("CONTENT", "retrieval error", error instanceof Error ? error.message : "unknown error");
-    panel.showError(error instanceof Error ? error.message : "Unable to retrieve memory.");
+    panel.showError(friendlyRetrievalError(error));
   }
+}
+
+function friendlyRetrievalError(error: unknown): string {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("backend") || message.includes("background service") || message.includes("could not reach")) {
+    return "Couldn't reach Memora. Check that the local backend is running.";
+  }
+  return "Couldn't retrieve memory. Try again.";
 }
 
 function useRetrievedContext(): void {
@@ -52,7 +60,7 @@ function start(): void {
   }
   adapter.observeInputChanges((query) => panel.setDraftAvailable(Boolean(query)));
   if (!adapter.hasDraftInput()) {
-    panel.showIdle("ChatGPT input not found yet. Memora will keep watching for it.");
+    panel.showIdle("Waiting for a question in ChatGPT.");
   }
 }
 
