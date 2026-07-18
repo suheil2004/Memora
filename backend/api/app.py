@@ -8,8 +8,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from backend.api.schemas import (
     ContextResponse,
@@ -32,6 +34,13 @@ from backend.ingestion.chatgpt_export import ChatGPTExportError
 from backend.rag.context_builder import CompactContextBuilder
 from backend.rag.openai_embeddings import EmbeddingConfigurationError
 from backend.rag.provider import create_embedding_service
+
+
+_MAX_VALIDATION_ERRORS = 10
+_MAX_VALIDATION_LOCATION_PARTS = 8
+_MAX_VALIDATION_LOCATION_CHARS = 64
+_MAX_VALIDATION_TYPE_CHARS = 64
+_MAX_VALIDATION_MESSAGE_CHARS = 160
 
 
 def build_service() -> MemoraService:
@@ -84,6 +93,13 @@ def create_app(
     container = ServiceContainer(service_factory)
     security = security_config or LocalSecurityConfig.from_environment()
     limiter = rate_limiter or InMemoryRateLimiter()
+
+    @application.exception_handler(RequestValidationError)
+    async def sanitized_validation_error(
+        _request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        errors = [_sanitize_validation_error(error) for error in exc.errors()[:_MAX_VALIDATION_ERRORS]]
+        return JSONResponse(status_code=422, content={"detail": errors})
 
     def service() -> MemoraService:
         try:
@@ -197,6 +213,23 @@ def create_app(
                 await upload.close()
 
     return application
+
+
+def _sanitize_validation_error(error: dict[str, object]) -> dict[str, object]:
+    raw_location = error.get("loc")
+    location_parts = raw_location if isinstance(raw_location, (list, tuple)) else ()
+    location: list[str | int] = []
+    for part in location_parts[:_MAX_VALIDATION_LOCATION_PARTS]:
+        if isinstance(part, int):
+            location.append(part)
+        else:
+            location.append(str(part)[:_MAX_VALIDATION_LOCATION_CHARS])
+
+    return {
+        "loc": location,
+        "type": str(error.get("type", "validation_error"))[:_MAX_VALIDATION_TYPE_CHARS],
+        "msg": str(error.get("msg", "Invalid request"))[:_MAX_VALIDATION_MESSAGE_CHARS],
+    }
 
 
 def _database_path(url: str) -> Path:

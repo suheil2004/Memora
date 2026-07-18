@@ -227,6 +227,41 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(too_high.status_code, 422)
         self.assertEqual(self.service.embeddings.embed_query_calls, calls_after_boundary)
 
+    def test_validation_errors_are_sanitized_bounded_and_keep_field_details(self) -> None:
+        oversized_query = "SENSITIVE-QUERY-MARKER-" + ("x" * 100_000)
+        calls_before = self.service.embeddings.embed_query_calls
+
+        oversized = self.client.post(
+            "/api/v1/context/retrieve", json={"query": oversized_query, "top_k": 5}
+        )
+
+        self.assertEqual(oversized.status_code, 422)
+        self.assertNotIn(oversized_query, oversized.text)
+        self.assertNotIn("SENSITIVE-QUERY-MARKER", oversized.text)
+        self.assertLess(len(oversized.content), 10_000)
+        self.assertEqual(self.service.embeddings.embed_query_calls, calls_before)
+        query_error = oversized.json()["detail"][0]
+        self.assertEqual(query_error["loc"], ["body", "query"])
+        self.assertEqual(query_error["type"], "string_too_long")
+        self.assertIn("at most 2000", query_error["msg"])
+        self.assertNotIn("input", query_error)
+
+        ordinary = self.client.post(
+            "/api/v1/context/retrieve", json={"query": "valid query", "top_k": 0}
+        )
+        self.assertEqual(ordinary.status_code, 422)
+        top_k_error = ordinary.json()["detail"][0]
+        self.assertEqual(top_k_error["loc"], ["body", "top_k"])
+        self.assertEqual(top_k_error["type"], "greater_than_equal")
+        self.assertTrue(top_k_error["msg"])
+        self.assertEqual(self.service.embeddings.embed_query_calls, calls_before)
+
+        valid = self.client.post(
+            "/api/v1/context/retrieve", json={"query": "valid query", "top_k": 5}
+        )
+        self.assertEqual(valid.status_code, 200, valid.text)
+        self.assertEqual(self.service.embeddings.embed_query_calls, calls_before + 1)
+
     def test_rate_limit_rejects_before_embedding(self) -> None:
         security = LocalSecurityConfig(
             token="rate-test-token-000000000000000000", user_id="user-a", retrieval_limit=1,
