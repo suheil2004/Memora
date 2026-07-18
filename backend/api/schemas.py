@@ -74,3 +74,15 @@ class ContextResponse(StrictModel):
     query: str
     context: str
     results: list[RetrievalResultResponse]
+
+
+class BulkImportResponse(StrictModel):
+    conversations_found: int
+    conversations_imported: int
+    conversations_skipped: int
+    messages_imported: int
+    chunks_indexed: int
+    embedding_provider: str
+    embedding_model: str
+    duration_seconds: float
+    errors: list[str]

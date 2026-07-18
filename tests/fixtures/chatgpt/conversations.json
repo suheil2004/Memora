@@ -1,0 +1,47 @@
+[
+  {
+    "id": "export-normal-1",
+    "title": "Synthetic Rocket Project",
+    "create_time": 1704067200,
+    "update_time": 1704067500,
+    "current_node": "assistant-main",
+    "mapping": {
+      "root": {"id": "root", "parent": null, "children": ["user-1"], "message": null},
+      "user-1": {
+        "id": "user-1", "parent": "root", "children": ["assistant-main", "assistant-branch"],
+        "message": {"id": "message-user-1", "author": {"role": "user"}, "create_time": 1704067210, "content": {"content_type": "text", "parts": ["My synthetic rocket uses a blue guidance computer."]}}
+      },
+      "assistant-main": {
+        "id": "assistant-main", "parent": "user-1", "children": [],
+        "message": {"id": "message-assistant-main", "author": {"role": "assistant"}, "create_time": 1704067220, "content": {"content_type": "text", "parts": ["The main branch recommends testing the navigation sensor."]}}
+      },
+      "assistant-branch": {
+        "id": "assistant-branch", "parent": "user-1", "children": [],
+        "message": {"id": "message-assistant-branch", "author": {"role": "assistant"}, "create_time": 1704067230, "content": {"content_type": "text", "parts": ["This abandoned branch must not be indexed."]}}
+      }
+    }
+  },
+  {
+    "id": "export-flat-2",
+    "title": "Synthetic Garden Notes",
+    "create_time": 1704153600,
+    "messages": [
+      {"id": "garden-1", "role": "user", "create_time": 1704153610, "content": "I planted fictional purple tomatoes in the north bed."},
+      {"id": "garden-2", "role": "assistant", "create_time": 1704153620, "content": "Water them early in the morning."}
+    ]
+  },
+  {
+    "id": "export-media-3",
+    "title": "Synthetic Mixed Content",
+    "current_node": "image",
+    "mapping": {
+      "text": {"id": "text", "parent": null, "children": ["image"], "message": {"id": "mixed-text", "author": {"role": "user"}, "content": {"content_type": "text", "parts": ["Keep this fake textual memory."]}}},
+      "image": {"id": "image", "parent": "text", "children": [], "message": {"id": "mixed-image", "author": {"role": "assistant"}, "content": {"content_type": "image_asset_pointer", "parts": [{"asset_pointer": "fake"}]}}}
+    }
+  },
+  {
+    "id": "export-malformed-4",
+    "title": "Malformed Synthetic Conversation",
+    "mapping": "not-an-object"
+  }
+]

@@ -46,6 +46,7 @@ class SQLiteVectorStore:
                 CREATE TABLE IF NOT EXISTS conversations (
                     id TEXT NOT NULL, user_id TEXT NOT NULL, title TEXT, source TEXT NOT NULL,
                     created_at TEXT, imported_at TEXT NOT NULL, external_id TEXT,
+                    updated_at TEXT, import_fingerprint TEXT,
                     PRIMARY KEY (id, user_id), FOREIGN KEY (user_id) REFERENCES users(id)
                 );
                 CREATE TABLE IF NOT EXISTS messages (
@@ -72,8 +73,19 @@ class SQLiteVectorStore:
             if "embedding_model" not in columns:
                 db.execute("ALTER TABLE chunks ADD COLUMN embedding_model TEXT")
                 db.execute("UPDATE chunks SET embedding_model = 'legacy-unknown'")
+            conversation_columns = {row[1] for row in db.execute("PRAGMA table_info(conversations)")}
+            if "updated_at" not in conversation_columns:
+                db.execute("ALTER TABLE conversations ADD COLUMN updated_at TEXT")
+            if "import_fingerprint" not in conversation_columns:
+                db.execute("ALTER TABLE conversations ADD COLUMN import_fingerprint TEXT")
 
-    def save_import(self, user: User, imported: ImportedConversation) -> None:
+    def save_import(
+        self,
+        user: User,
+        imported: ImportedConversation,
+        *,
+        import_fingerprint: str | None = None,
+    ) -> None:
         conversation = imported.conversation
         if conversation.user_id != user.id or any(m.user_id != user.id for m in imported.messages):
             raise ValueError("all imported data must belong to the supplied user")
@@ -84,12 +96,14 @@ class SQLiteVectorStore:
             )
             db.execute(
                 """INSERT OR REPLACE INTO conversations
-                   (id, user_id, title, source, created_at, imported_at, external_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                   (id, user_id, title, source, created_at, imported_at, external_id,
+                    updated_at, import_fingerprint)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     conversation.id, user.id, conversation.title, conversation.source,
                     _iso(conversation.created_at), conversation.imported_at.isoformat(),
                     conversation.external_id,
+                    _iso(conversation.updated_at), import_fingerprint,
                 ),
             )
             db.executemany(
@@ -101,6 +115,14 @@ class SQLiteVectorStore:
                     for m in imported.messages
                 ],
             )
+
+    def get_import_fingerprint(self, conversation_id: str, *, user_id: str) -> str | None:
+        with self._connection() as db:
+            row = db.execute(
+                "SELECT import_fingerprint FROM conversations WHERE id = ? AND user_id = ?",
+                (conversation_id, user_id),
+            ).fetchone()
+        return row[0] if row else None
 
     def upsert(
         self,

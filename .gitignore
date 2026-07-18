@@ -7,4 +7,9 @@ __pycache__/
 node_modules/
 extension/dist/
 *.sqlite3
-
+conversations.json
+conversations-*.json
+conversations_*.json
+chatgpt-export*.zip
+*chatgpt*export*.zip
+!tests/fixtures/**/conversations.json

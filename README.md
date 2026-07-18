@@ -215,6 +215,61 @@ main form [contenteditable="true"]
 
 ChatGPT's DOM is not a public stable API, so these selectors may require maintenance. All such assumptions are isolated in `extension/src/adapters/chatgpt-adapter.ts`.
 
+## Import ChatGPT conversation history
+
+Memora imports files supplied explicitly by the user; it does not use a private or unsupported ChatGPT history API. Supported MVP inputs are:
+
+- A `conversations.json` containing an array of conversations.
+- Individual JSON files containing one conversation, an array, or a top-level `conversations` array.
+- Numbered files named like `conversations-1.json`, `conversations_001.json`, or `1.json`, selected together.
+- A ZIP containing those conversation JSON names. ZIP entries are inspected in memory and never extracted.
+
+The importer supports the synthetic graph shape represented by a `mapping` plus `current_node`, and a simpler flat `messages` list. For graphs, it walks from `current_node` through parents to reconstruct the active branch. If `current_node` is unavailable, it chooses the latest leaf it can identify. Only user/assistant textual parts are indexed; unsupported media and internal/system nodes are skipped. Export formats can evolve, so compatibility with every historical ChatGPT export variant is not claimed.
+
+### API import
+
+Start the backend and upload one or more files:
+
+```powershell
+$files = Get-Item .\path\to\conversations.json
+$response = Invoke-RestMethod -Method Post `
+  -Uri http://127.0.0.1:8765/api/v1/import/chatgpt `
+  -Form @{ user_id = "demo-user"; files = $files }
+$response | ConvertTo-Json -Depth 5
+```
+
+Alternatively use curl:
+
+```powershell
+curl.exe -X POST http://127.0.0.1:8765/api/v1/import/chatgpt `
+  -F "user_id=demo-user" `
+  -F "files=@C:\path\to\conversations.json;type=application/json"
+```
+
+The synchronous response reports conversations found/imported/skipped, messages, chunks, provider/model, elapsed time, and sanitized errors. Large OpenAI imports can take several minutes. Chunks from each conversation are embedded as a batch; this MVP does not have a background queue or cross-conversation mega-batch.
+
+### Extension import
+
+Reload the unpacked extension after building, open its toolbar popup, choose one or more JSON files or one ZIP, and click **Import ChatGPT History**. Browser file access occurs only after that explicit selection. The export goes to the local Memora backend; it is parsed and chunked locally. Only chunk text required for embeddings is sent by the backend to the configured embedding provider. The browser never receives or stores an OpenAI API key.
+
+### Duplicate behavior
+
+Memora stores a normalized SHA-256 fingerprint for each user-scoped conversation ID. An unchanged re-import is skipped without recomputing embeddings. A changed conversation with the same ID replaces and re-indexes the prior copy. Conversation IDs and fingerprints are scoped by the explicit MVP `user_id`.
+
+### Manual real-export test
+
+1. Request and download your official ChatGPT data export.
+2. Do not copy the real export into this repository.
+3. Start Memora with `MEMORA_EMBEDDING_PROVIDER=openai` and the backend on port `8765`.
+4. Open the Memora extension popup and confirm `demo-user`.
+5. Select the export's `conversations.json`, numbered JSON files, or ZIP and click **Import ChatGPT History**.
+6. Record the reported conversation/message/chunk counts and duration.
+7. Open a fresh ChatGPT conversation and type a vague question about a genuinely old discussion.
+8. Click **Retrieve memory** and confirm the correct historical conversation appears.
+9. Click **Use this context**, review the inserted context, and submit manually if desired.
+
+Real exports, `conversations.json`, and ChatGPT export ZIPs are ignored by Git. Synthetic fixtures under `tests/fixtures` are explicitly allowed. The backend does not log conversation bodies, does not expose embeddings, closes uploads, and never extracts ZIP contents. Limits currently include 1,000 ZIP entries, 200 MiB total uncompressed ZIP content, 50 MiB per JSON file, and 250 MiB per multipart request.
+
 ## Current status and limitations
 
 The core models distinguish original searchable conversation chunks from extracted durable memories. Python `Protocol` contracts keep providers and retrieval logic independent. The local hashes provide reproducible lexical similarity, while OpenAI embeddings support semantic retrieval. SQLite still performs an in-process linear scan, suitable only for the hackathon-scale demo. The extension remains an untouched shell with no DOM behavior.

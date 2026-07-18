@@ -6,6 +6,8 @@ from typing import Any
 from backend.database.sqlite_store import SQLiteVectorStore
 from backend.ingestion.chunker import ConversationChunker
 from backend.ingestion.json_importer import JsonConversationImporter
+from backend.ingestion.bulk_import import BulkImportSummary, ChatGPTBulkImportService
+from backend.ingestion.chatgpt_export import ChatGPTExportImporter
 from backend.interfaces import EmbeddingService, RetrievalResult
 from backend.models import User
 from backend.rag.context_builder import CompactContextBuilder
@@ -86,3 +88,16 @@ class MemoraService:
             max_chars=max_context_chars or self.context_max_chars,
         )
         return ContextResponseData(query, context, results)
+
+    def import_chatgpt_history(
+        self,
+        uploads: tuple[tuple[str, bytes], ...],
+        *,
+        user_id: str,
+    ) -> BulkImportSummary:
+        return ChatGPTBulkImportService(
+            importer=ChatGPTExportImporter(),
+            chunker=self.chunker,
+            embeddings=self.embeddings,
+            store=self.store,
+        ).import_uploads(uploads, user_id=user_id)

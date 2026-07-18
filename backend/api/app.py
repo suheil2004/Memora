@@ -7,11 +7,12 @@ from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.schemas import (
     ContextResponse,
+    BulkImportResponse,
     ContextRetrieveRequest,
     ConversationImportRequest,
     ImportResponse,
@@ -21,6 +22,7 @@ from backend.api.service import MemoraService
 from backend.database.sqlite_store import IncompatibleEmbeddingError, SQLiteVectorStore
 from backend.ingestion.chunker import ConversationChunker
 from backend.ingestion.json_importer import ConversationImportError, JsonConversationImporter
+from backend.ingestion.chatgpt_export import ChatGPTExportError
 from backend.rag.context_builder import CompactContextBuilder
 from backend.rag.openai_embeddings import EmbeddingConfigurationError
 from backend.rag.provider import create_embedding_service
@@ -123,6 +125,36 @@ def create_app(*, service_factory: Callable[[], MemoraService] = build_service) 
             raise
         except Exception as exc:
             raise HTTPException(status_code=500, detail="Context retrieval failed") from exc
+
+    @application.post("/api/v1/import/chatgpt", response_model=BulkImportResponse)
+    async def import_chatgpt(
+        user_id: str = Form(..., min_length=1),
+        files: list[UploadFile] = File(...),
+    ) -> BulkImportResponse:
+        if not user_id.strip():
+            raise HTTPException(status_code=422, detail="user_id cannot be blank")
+        if not files:
+            raise HTTPException(status_code=422, detail="at least one export file is required")
+        uploads: list[tuple[str, bytes]] = []
+        total_bytes = 0
+        try:
+            for upload in files:
+                data = await upload.read()
+                total_bytes += len(data)
+                if total_bytes > 250 * 1024 * 1024:
+                    raise HTTPException(status_code=413, detail="uploaded export exceeds the size limit")
+                uploads.append((upload.filename or "upload", data))
+            summary = service().import_chatgpt_history(tuple(uploads), user_id=user_id.strip())
+            return BulkImportResponse.model_validate(asdict(summary))
+        except ChatGPTExportError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="ChatGPT history import failed") from exc
+        finally:
+            for upload in files:
+                await upload.close()
 
     return application
 

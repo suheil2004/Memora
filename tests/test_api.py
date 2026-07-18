@@ -111,6 +111,40 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json(), {"detail": "OPENAI_API_KEY is required"})
 
+    def test_chatgpt_export_multipart_upload_and_duplicate_summary(self) -> None:
+        fixture = ROOT / "tests" / "fixtures" / "chatgpt" / "conversations.json"
+        first = self.client.post(
+            "/api/v1/import/chatgpt",
+            data={"user_id": "demo-user"},
+            files=[("files", ("conversations.json", fixture.read_bytes(), "application/json"))],
+        )
+        self.assertEqual(first.status_code, 200, first.text)
+        summary = first.json()
+        self.assertEqual(summary["conversations_found"], 4)
+        self.assertEqual(summary["conversations_imported"], 3)
+        self.assertEqual(summary["conversations_skipped"], 1)
+        self.assertEqual(summary["embedding_provider"], "local")
+        self.assertNotIn("embedding", summary)
+
+        second = self.client.post(
+            "/api/v1/import/chatgpt",
+            data={"user_id": "demo-user"},
+            files=[("files", ("conversations.json", fixture.read_bytes(), "application/json"))],
+        )
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.json()["conversations_imported"], 0)
+
+    def test_chatgpt_upload_requires_user_and_file(self) -> None:
+        missing_user = self.client.post(
+            "/api/v1/import/chatgpt",
+            files=[("files", ("conversations.json", b"[]", "application/json"))],
+        )
+        missing_file = self.client.post(
+            "/api/v1/import/chatgpt", data={"user_id": "demo-user"}
+        )
+        self.assertEqual(missing_user.status_code, 422)
+        self.assertEqual(missing_file.status_code, 422)
+
 
 if __name__ == "__main__":
     unittest.main()

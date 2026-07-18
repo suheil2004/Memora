@@ -63,6 +63,7 @@ class Conversation:
     created_at: datetime | None = None
     imported_at: datetime = field(default_factory=utc_now)
     external_id: str | None = None
+    updated_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,4 +104,3 @@ class StructuredMemory:
             raise ValueError("confidence must be between 0 and 1")
         if not self.source_conversation_ids:
             raise ValueError("structured memory must retain source provenance")
-

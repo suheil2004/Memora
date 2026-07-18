@@ -14,7 +14,7 @@ export async function requestMemoraContext(
   runtime: RuntimeMessenger = chrome.runtime,
 ): Promise<ContextResponse> {
   const request: BackgroundRequest = { type: "MEMORA_RETRIEVE_CONTEXT", query };
-  debug("CONTENT", "sending runtime message", request);
+  debug("CONTENT", "sending runtime message", { type: request.type, queryLength: query.length });
   let response: BackgroundResponse | undefined;
   try {
     response = await runtime.sendMessage(request) as BackgroundResponse | undefined;

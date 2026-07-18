@@ -19,6 +19,18 @@ export interface RetrieveRequest {
   top_k: number;
 }
 
+export interface BulkImportSummary {
+  conversations_found: number;
+  conversations_imported: number;
+  conversations_skipped: number;
+  messages_imported: number;
+  chunks_indexed: number;
+  embedding_provider: string;
+  embedding_model: string;
+  duration_seconds: number;
+  errors: string[];
+}
+
 export type BackgroundRequest = { type: "MEMORA_RETRIEVE_CONTEXT"; query: string };
 export type ExtensionErrorCode =
   | "BACKEND_UNREACHABLE"

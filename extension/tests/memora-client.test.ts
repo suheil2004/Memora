@@ -82,6 +82,51 @@ describe("MemoraApiClient", () => {
       new MemoraApiClient("http://localhost:8765", invalidFetch).retrieve({ user_id: "u", query: "q", top_k: 1 }),
     ).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
   });
+
+  it("uploads selected ChatGPT exports as multipart and validates the summary", async () => {
+    const summary = {
+      conversations_found: 4,
+      conversations_imported: 3,
+      conversations_skipped: 1,
+      messages_imported: 5,
+      chunks_indexed: 3,
+      embedding_provider: "local",
+      embedding_model: "feature-hash-v1-1024",
+      duration_seconds: 0.4,
+      errors: ["one synthetic conversation was skipped"],
+    };
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify(summary), { status: 200 }),
+    );
+    const file = new File(["[]"], "conversations.json", { type: "application/json" });
+
+    await expect(
+      new MemoraApiClient("http://127.0.0.1:8765", fetchMock)
+        .importChatGPTHistory([file], "demo-user"),
+    ).resolves.toEqual(summary);
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("http://127.0.0.1:8765/api/v1/import/chatgpt");
+    expect(init?.method).toBe("POST");
+    expect(init?.headers).toBeUndefined();
+    expect(init?.body).toBeInstanceOf(FormData);
+    const body = init?.body as FormData;
+    expect(body.get("user_id")).toBe("demo-user");
+    expect((body.get("files") as File).name).toBe("conversations.json");
+  });
+
+  it("rejects empty file selections and malformed import summaries", async () => {
+    const client = new MemoraApiClient("http://127.0.0.1:8765", vi.fn<typeof fetch>());
+    await expect(client.importChatGPTHistory([], "demo-user")).rejects.toThrow("Select at least one");
+
+    const invalidFetch = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ conversations_found: "many" }), { status: 200 }),
+    );
+    await expect(
+      new MemoraApiClient("http://127.0.0.1:8765", invalidFetch)
+        .importChatGPTHistory([new File(["[]"], "conversations.json")], "demo-user"),
+    ).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+  });
 });
 
 describe("isContextResponse", () => {

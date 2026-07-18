@@ -13,8 +13,9 @@ def index_conversation(
     chunker: ConversationChunker,
     embeddings: EmbeddingService,
     store: SQLiteVectorStore,
+    import_fingerprint: str | None = None,
 ) -> tuple[ConversationChunk, ...]:
-    store.save_import(user, imported)
+    store.save_import(user, imported, import_fingerprint=import_fingerprint)
     chunks = chunker.chunk(imported)
     vectors = embeddings.embed_documents([chunk.content for chunk in chunks])
     store.upsert(

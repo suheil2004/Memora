@@ -15,7 +15,7 @@ async function retrieveMemory(): Promise<void> {
     if (!adapter.isSupportedPage()) throw new Error("This page is not supported by Memora.");
     if (!adapter.hasDraftInput()) throw new Error("ChatGPT input was not found. Reload the page and try again.");
     const query = requireDraftQuery(adapter.getCurrentDraftQuery());
-    debug("CONTENT", "extracted query", query);
+    debug("CONTENT", "extracted query", { queryLength: query.length });
     panel.showLoading();
     const response = await requestMemoraContext(query);
     retrievedSnapshot = createContextSnapshot(response, query);

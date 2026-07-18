@@ -10,6 +10,8 @@ backend/api/service.py
 backend/database/__init__.py
 backend/database/sqlite_store.py
 backend/ingestion/__init__.py
+backend/ingestion/bulk_import.py
+backend/ingestion/chatgpt_export.py
 backend/ingestion/chunker.py
 backend/ingestion/json_importer.py
 backend/memory/__init__.py
@@ -25,6 +27,7 @@ memora_backend.egg-info/SOURCES.txt
 memora_backend.egg-info/dependency_links.txt
 memora_backend.egg-info/requires.txt
 memora_backend.egg-info/top_level.txt
+tests/test_api.py
 tests/test_embedding_providers.py
 tests/test_interfaces.py
 tests/test_models.py

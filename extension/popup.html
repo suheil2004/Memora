@@ -17,6 +17,14 @@
       </form>
       <p id="status" role="status"></p>
       <small>This user ID is not authentication.</small>
+      <hr>
+      <h2>Import ChatGPT history</h2>
+      <p>Select files from your ChatGPT data export. Files are sent only to your local Memora backend.</p>
+      <form id="import-form">
+        <label>Export files<input id="import-files" type="file" accept=".json,.zip,application/json,application/zip" multiple required></label>
+        <button id="import-submit" type="submit">Import ChatGPT History</button>
+      </form>
+      <div id="import-status" role="status"></div>
     </main>
     <script type="module" src="popup.js"></script>
   </body>

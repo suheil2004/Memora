@@ -19,7 +19,7 @@ export function registerBackgroundListener(
   dependencies?: BackgroundDependencies,
 ): void {
   runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    debug("BACKGROUND", "message received", message);
+    debug("BACKGROUND", "message received");
     const messageType = readMessageType(message);
     debug("BACKGROUND", "received message type", messageType ?? "missing");
     if (!isRetrieveRequest(message)) {
