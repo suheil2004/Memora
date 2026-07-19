@@ -12,6 +12,7 @@ from backend.interfaces import EmbeddingService, RetrievalResult
 from backend.models import User
 from backend.rag.context_builder import CompactContextBuilder
 from backend.rag.pipeline import index_conversation
+from backend.rag.relevance import minimum_relevance_similarity
 from backend.rag.retriever import SemanticMemoryRetriever
 
 
@@ -48,6 +49,7 @@ class MemoraService:
         self.store = store
         self.context_builder = context_builder
         self.context_max_chars = context_max_chars
+        self.relevance_min_similarity = minimum_relevance_similarity(embeddings)
         self.retriever = SemanticMemoryRetriever(embeddings, store)
 
     def import_conversation(self, payload: dict[str, Any], *, user_id: str) -> ImportSummary:
@@ -80,7 +82,7 @@ class MemoraService:
             query,
             user_id=user_id,
             limit=top_k,
-            min_similarity=min_similarity,
+            min_similarity=max(min_similarity, self.relevance_min_similarity),
         )
         context = self.context_builder.build(
             query,

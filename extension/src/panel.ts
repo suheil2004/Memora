@@ -10,6 +10,7 @@ export class MemoraPanel {
   private readonly content: HTMLElement;
 
   constructor(onRetrieve: () => void, onUseContext: () => void) {
+    document.getElementById("memora-extension-root")?.remove();
     const host = document.createElement("aside");
     host.id = "memora-extension-root";
     const root = host.attachShadow({ mode: "open" });
@@ -74,7 +75,7 @@ export class MemoraPanel {
     this.action.disabled = false;
     if (response.results.length === 0 || !response.context.trim()) {
       this.action.textContent = "Retrieve again";
-      this.renderState("empty", "No relevant memory found. Try making your question a little more specific.");
+      this.renderState("empty", "No relevant memory found for this question.");
       return;
     }
     const points = extractContextPoints(response.context);

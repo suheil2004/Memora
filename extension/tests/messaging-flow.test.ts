@@ -5,6 +5,7 @@ import type { BackgroundRequest } from "../src/api/types";
 import { handleBackgroundRequest, type BackgroundDependencies } from "../src/background-handler";
 import { registerBackgroundListener, type BackgroundRuntime } from "../src/background-listener";
 import { requestMemoraContext, type RuntimeMessenger } from "../src/messaging";
+import { MemoraPanel } from "../src/panel";
 
 const apiResponse = {
   query: "Where is inference running?",
@@ -16,6 +17,26 @@ const apiResponse = {
     chunk_id: "chunk-1",
     score: 0.82,
     source_message_ids: ["message-1"],
+  }],
+};
+
+const exactBackendResponse = {
+  query: "How was the camera feed being processed in my drone detection setup?",
+  context: `[Memora Context]
+Source: Drone Detection Project
+
+User previously discussed:
+
+* User: A Raspberry Pi 4 streams the camera feed.
+* User: A Windows laptop with CUDA performs inference.
+[/Memora Context]`,
+  results: [{
+    user_id: "demo-user",
+    conversation_id: "conv_drone_001",
+    conversation_title: "Drone Detection Project",
+    chunk_id: "chunk-drone-1",
+    score: 0.6348452862421988,
+    source_message_ids: ["message-drone-1"],
   }],
 };
 
@@ -109,5 +130,31 @@ describe("content-to-background retrieval messaging", () => {
 
     await expect(response).resolves.toMatchObject({ ok: true, data: apiResponse });
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("carries the exact successful API response through messaging and renders it", async () => {
+    document.body.innerHTML = "";
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify(exactBackendResponse), { status: 200 }),
+    );
+    const runtime: RuntimeMessenger = {
+      sendMessage: (message: BackgroundRequest) =>
+        handleBackgroundRequest(message, dependencies(fetchMock)),
+    };
+    const response = await requestMemoraContext(exactBackendResponse.query, runtime);
+    const panel = new MemoraPanel(vi.fn(), vi.fn());
+    panel.showResults(response);
+
+    const root = document.querySelector<HTMLElement>("#memora-extension-root")!.shadowRoot!;
+    const status = root.querySelector<HTMLElement>("#memora-status")!;
+    const useContext = root.querySelector<HTMLButtonElement>("#memora-use-context")!;
+    expect(response).toEqual(exactBackendResponse);
+    expect(status.dataset.state).toBe("results");
+    expect(root.textContent).toContain("Drone Detection Project");
+    expect(root.textContent).toContain("A Raspberry Pi 4 streams the camera feed.");
+    expect(root.textContent).toContain("A Windows laptop with CUDA performs inference.");
+    expect(root.textContent).not.toContain("No relevant memory found");
+    expect(root.textContent).not.toContain("Memory retrieval failed");
+    expect(useContext.hidden).toBe(false);
   });
 });

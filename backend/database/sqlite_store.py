@@ -8,6 +8,7 @@ import sqlite3
 from collections.abc import Sequence
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 from backend.interfaces import Embedding, ImportedConversation, RetrievalResult
 from backend.models import ConversationChunk, User
@@ -18,11 +19,16 @@ class IncompatibleEmbeddingError(ValueError):
 
 
 class SQLiteVectorStore:
-    def __init__(self, path: Path | str) -> None:
+    def __init__(self, path: Path | str, *, read_only: bool = False) -> None:
         self.path = str(path)
-        self._initialize()
+        self.read_only = read_only
+        if not read_only:
+            self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
+        if self.read_only:
+            resolved = Path(self.path).resolve().as_posix()
+            return sqlite3.connect(f"file:{quote(resolved, safe='/:')}?mode=ro", uri=True)
         connection = sqlite3.connect(self.path)
         connection.execute("PRAGMA foreign_keys = ON")
         return connection

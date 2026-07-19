@@ -59,6 +59,11 @@ On the repository's small 15-query MVP evaluation dataset:
 - OpenAI `text-embedding-3-small` Top-1: **100%**
 - OpenAI `text-embedding-3-small` Top-3: **100%**
 
+The evaluator also includes five synthetic no-match queries. With the calibrated
+local relevance floor, the local baseline abstains on **5/5** instead of forcing
+the nearest unrelated conversation into the result. Positive ranking accuracy
+and negative abstention are reported separately.
+
 This is a demo regression dataset, not a production benchmark. Live OpenAI evaluation is opt-in and consumes API credits:
 
 ```powershell
@@ -66,6 +71,19 @@ python -m scripts.evaluate_retrieval --provider local
 $env:OPENAI_API_KEY = "your-api-key"
 python -m scripts.evaluate_retrieval --provider openai
 ```
+
+Before enabling abstention for a semantic provider, print raw scores from the
+existing database in read-only mode and calibrate its floor:
+
+```powershell
+python -m scripts.calibrate_relevance --provider openai --database .\memora.sqlite3 --user-id demo-user
+$env:MEMORA_RELEVANCE_MIN_SIMILARITY = "<measured-floor>"
+```
+
+The calibration command uses the current `OPENAI_API_KEY` only through the
+backend embedding provider and never prints it. Unknown and semantic embedding
+spaces require an explicit measured floor; Memora does not assume their score
+distributions are interchangeable.
 
 ## Local Setup
 

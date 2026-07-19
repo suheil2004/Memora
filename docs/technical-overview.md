@@ -91,6 +91,8 @@ Every stored vector includes its embedding provider and model identity. Retrieva
 
 Search loads the requested user's vectors and computes cosine similarity in the application process. This linear scan is simple and sufficient for the hackathon dataset, but it is not intended for large production indexes.
 
+Retrieval applies an embedding-space-specific minimum cosine floor before context construction. The request's `min_similarity` may make this gate stricter but cannot lower the calibrated provider floor. Known local hash spaces have measured development defaults. Semantic and unknown providers require an explicit `MEMORA_RELEVANCE_MIN_SIMILARITY` measured with the read-only `scripts.calibrate_relevance` diagnostic; their score distributions are not assumed equivalent. If no chunk clears the gate, the API returns HTTP 200 with empty `results` and an empty `context`; the extension presents this as a valid “No relevant memory found” state rather than a retrieval failure. Stored provider/model metadata must exactly match the active embedding service, and vector dimensions must agree, so incompatible embedding spaces fail clearly instead of being silently ranked.
+
 ## Browser Extension
 
 The extension uses Chrome Manifest V3:
@@ -121,7 +123,7 @@ Current boundaries are not complete production security: the local bearer token 
 
 ## Retrieval Evaluation
 
-The repository includes 15 paraphrased queries across five synthetic topics. The local feature-hash baseline achieved 46.7% Top-1 accuracy. OpenAI `text-embedding-3-small` achieved 15/15 Top-1 and 15/15 Top-3 accuracy.
+The repository includes 15 paraphrased positive queries across five synthetic topics and five synthetic negative/no-match queries. The local feature-hash baseline achieved 46.7% positive Top-1 accuracy and 5/5 negative abstention with its calibrated floor. OpenAI `text-embedding-3-small` previously achieved 15/15 positive Top-1 and 15/15 positive Top-3 accuracy; live OpenAI evaluation remains opt-in and is not run by automated tests.
 
 The local baseline emphasizes overlapping hashed lexical features, so it struggles when a query paraphrases a stored fact using different vocabulary. Semantic embeddings better align those related meanings. This small MVP dataset verifies the intended demo behavior; it does not establish general or production retrieval accuracy.
 

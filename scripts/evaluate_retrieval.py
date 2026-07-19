@@ -14,6 +14,7 @@ from backend.ingestion.json_importer import JsonConversationImporter
 from backend.models import User
 from backend.rag.pipeline import index_conversation
 from backend.rag.provider import create_embedding_service
+from backend.rag.relevance import minimum_relevance_similarity
 from backend.rag.retriever import SemanticMemoryRetriever
 
 
@@ -50,8 +51,16 @@ CASES = (
     EvaluationCase("Event Planning", "Roughly how many attendees are we preparing to host?"),
 )
 
+NEGATIVE_CASES = (
+    "What is my workout plan?",
+    "What medicine did I take yesterday?",
+    "What is my favorite video game?",
+    "Where did I leave my keys?",
+    "Which bank account did I use for the electricity bill?",
+)
 
-def evaluate(provider: str) -> tuple[int, int, int]:
+
+def evaluate(provider: str) -> tuple[int, int, int, int, int]:
     embeddings = create_embedding_service(provider)
     importer = JsonConversationImporter()
     chunker = ConversationChunker(max_tokens=120, overlap_tokens=20)
@@ -67,11 +76,14 @@ def evaluate(provider: str) -> tuple[int, int, int]:
             )
 
         retriever = SemanticMemoryRetriever(embeddings, store)
+        threshold = minimum_relevance_similarity(embeddings)
         top1 = 0
         top3 = 0
-        print(f"\n=== {provider.upper()} ({embeddings.model_name}) ===")
+        print(f"\n=== {provider.upper()} ({embeddings.model_name}; threshold {threshold:.2f}) ===")
         for case in CASES:
-            results = retriever.retrieve(case.query, user_id=user.id, limit=3, min_similarity=-1.0)
+            results = retriever.retrieve(
+                case.query, user_id=user.id, limit=3, min_similarity=threshold
+            )
             titles = [result.conversation_title for result in results]
             passed = bool(titles) and titles[0] == case.expected
             top1 += int(passed)
@@ -82,10 +94,23 @@ def evaluate(provider: str) -> tuple[int, int, int]:
                 print(f"  {rank}. {(result.conversation_title or 'Untitled'):<28} {result.score:.4f}")
             print("PASS" if passed else "FAIL")
 
+        abstained = 0
+        print("\n--- Negative/no-match queries ---")
+        for query in NEGATIVE_CASES:
+            raw = retriever.retrieve(query, user_id=user.id, limit=3, min_similarity=-1.0)
+            results = tuple(result for result in raw if result.score >= threshold)
+            abstained += int(not results)
+            print(f'\nQuery: "{query}"')
+            for rank, result in enumerate(raw, start=1):
+                print(f"  {rank}. {(result.conversation_title or 'Untitled'):<28} {result.score:.4f}")
+            print("NO_RELEVANT_MEMORY" if not results else "FALSE MATCH")
+
     total = len(CASES)
-    print(f"\nTop-1 Accuracy: {top1}/{total} ({top1 / total:.1%})")
-    print(f"Top-3 Accuracy: {top3}/{total} ({top3 / total:.1%})")
-    return top1, top3, total
+    negative_total = len(NEGATIVE_CASES)
+    print(f"\nPositive Top-1: {top1}/{total} ({top1 / total:.1%})")
+    print(f"Positive Top-3: {top3}/{total} ({top3 / total:.1%})")
+    print(f"Negative abstention: {abstained}/{negative_total} ({abstained / negative_total:.1%})")
+    return top1, top3, total, abstained, negative_total
 
 
 def main() -> None:
@@ -103,8 +128,11 @@ def main() -> None:
     summaries = [evaluate(provider) for provider in providers]
     if len(summaries) == 2:
         print("\n=== RANKING ACCURACY COMPARISON ===")
-        for provider, (top1, top3, total) in zip(providers, summaries):
-            print(f"{provider:<8} Top-1 {top1}/{total}; Top-3 {top3}/{total}")
+        for provider, (top1, top3, total, abstained, negative_total) in zip(providers, summaries):
+            print(
+                f"{provider:<8} Top-1 {top1}/{total}; Top-3 {top3}/{total}; "
+                f"abstention {abstained}/{negative_total}"
+            )
 
 
 if __name__ == "__main__":

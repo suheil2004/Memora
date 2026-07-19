@@ -59,17 +59,43 @@ describe("polished Memora panel states", () => {
     expect(ui.retrieve.textContent).toBe("Retrieve again");
   });
 
-  it("renders no-result, error, and inserted states clearly", () => {
+  it("renders no-match without a context action and keeps errors distinct", () => {
     const panel = new MemoraPanel(vi.fn(), vi.fn());
     panel.showResults({ ...response, context: "", results: [] });
-    let ui = elements();
-    expect(ui.status.textContent).toContain("No relevant memory found");
+    const ui = elements();
+    expect(ui.status.textContent).toBe("No relevant memory found for this question.");
+    expect(ui.status.dataset.state).toBe("empty");
+    expect(ui.use.hidden).toBe(true);
+    expect(ui.root.textContent).not.toContain("Top match");
+    expect(ui.retrieve.textContent).toBe("Retrieve again");
     panel.showError("Couldn't reach Memora. Check that the local backend is running.");
     expect(ui.status.dataset.state).toBe("error");
+    expect(ui.status.textContent).not.toContain("No relevant memory found");
+  });
+
+  it("keeps valid results usable and hides the action after insertion", () => {
+    const panel = new MemoraPanel(vi.fn(), vi.fn());
     panel.showResults(response);
+    let ui = elements();
+    expect(ui.status.dataset.state).toBe("results");
+    expect(ui.use.hidden).toBe(false);
     panel.showContextUsed();
     ui = elements();
     expect(ui.status.textContent).toContain("Context added to your draft");
+    expect(ui.use.hidden).toBe(true);
+  });
+
+  it("keeps one live panel so a detached stale instance cannot overwrite it", () => {
+    const stalePanel = new MemoraPanel(vi.fn(), vi.fn());
+    const currentPanel = new MemoraPanel(vi.fn(), vi.fn());
+
+    expect(document.querySelectorAll("#memora-extension-root")).toHaveLength(1);
+    currentPanel.showIdle("Current extension instance");
+    stalePanel.showResults(response);
+
+    const ui = elements();
+    expect(ui.status.textContent).toBe("Current extension instance");
+    expect(ui.root.textContent).not.toContain(response.results[0].conversation_title);
     expect(ui.use.hidden).toBe(true);
   });
 });

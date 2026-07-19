@@ -11,6 +11,7 @@ from backend.models import User
 from backend.rag.context_builder import CompactContextBuilder
 from backend.rag.pipeline import index_conversation
 from backend.rag.provider import create_embedding_service
+from backend.rag.relevance import minimum_relevance_similarity
 from backend.rag.retriever import SemanticMemoryRetriever
 
 
@@ -21,7 +22,7 @@ def main() -> None:
     )
     parser.add_argument("--database", type=Path, help="SQLite path; defaults to a temporary demo DB")
     parser.add_argument("--top-k", type=int, default=3)
-    parser.add_argument("--min-similarity", type=float, default=0.03)
+    parser.add_argument("--min-similarity", type=float)
     args = parser.parse_args()
 
     temporary = tempfile.TemporaryDirectory() if args.database is None else None
@@ -30,6 +31,11 @@ def main() -> None:
     importer = JsonConversationImporter()
     chunker = ConversationChunker(max_tokens=80, overlap_tokens=20)
     embeddings = create_embedding_service()
+    min_similarity = (
+        args.min_similarity
+        if args.min_similarity is not None
+        else minimum_relevance_similarity(embeddings)
+    )
     store = SQLiteVectorStore(database)
 
     root = Path(__file__).resolve().parents[1]
@@ -46,7 +52,7 @@ def main() -> None:
         )
 
     results = SemanticMemoryRetriever(embeddings, store).retrieve(
-        args.query, user_id=user.id, limit=args.top_k, min_similarity=args.min_similarity
+        args.query, user_id=user.id, limit=args.top_k, min_similarity=min_similarity
     )
     print(f"Embedding: {embeddings.provider_name}/{embeddings.model_name}")
     print(f"Query: {args.query}\n")

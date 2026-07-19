@@ -92,18 +92,55 @@ class ApiTests(unittest.TestCase):
         self.assertTrue(result["source_message_ids"])
         self.assertIsInstance(result["score"], float)
 
+    def test_retrieval_abstains_for_unrelated_queries(self) -> None:
+        imported = self.client.post(
+            "/api/v1/conversations/import", json=self._conversation()
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+
+        for query in (
+            "How was the camera feed being processed in my drone detection setup?",
+            "What computer was doing inference for my drone project?",
+        ):
+            with self.subTest(query=query):
+                response = self.client.post(
+                    "/api/v1/context/retrieve",
+                    json={"query": query, "top_k": 5, "min_similarity": -1.0},
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertTrue(response.json()["results"])
+                self.assertEqual(
+                    response.json()["results"][0]["conversation_title"],
+                    "Drone Detection Project",
+                )
+
+        for query in (
+            "What is my workout plan?",
+            "Where did I leave my keys?",
+            "What medicine did I take yesterday?",
+        ):
+            with self.subTest(query=query):
+                response = self.client.post(
+                    "/api/v1/context/retrieve",
+                    json={"query": query, "top_k": 5, "min_similarity": -1.0},
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.json()["results"], [])
+                self.assertEqual(response.json()["context"], "")
+
     def test_retrieval_is_user_isolated(self) -> None:
         imported = self.client.post("/api/v1/conversations/import", json=self._conversation())
         self.assertEqual(imported.status_code, 200)
+        query = "drone detection camera feed inference CUDA"
         response = self.client.post(
             "/api/v1/context/retrieve",
-            json={"user_id": "user-b", "query": "CUDA inference", "top_k": 5},
+            json={"user_id": "user-b", "query": query, "top_k": 5},
         )
         self.assertEqual(response.status_code, 422)
 
         valid = self.client.post(
             "/api/v1/context/retrieve",
-            json={"query": "CUDA inference", "top_k": 5},
+            json={"query": query, "top_k": 5},
         )
         self.assertEqual(valid.status_code, 200)
         self.assertTrue(valid.json()["results"])
