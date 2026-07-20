@@ -74,7 +74,7 @@ Post-remediation architecture is documented in [security-architecture.md](securi
 
 ### SEC-003 — Retrieved historical text can act as indirect prompt injection
 
-- **Status:** **MITIGATED.** Inserted context now explicitly calls history untrusted reference data, says not to follow contained instructions, escapes forged delimiter strings, encloses it in `<historical_memory>`, and separates the current question. Prompt injection cannot be completely prevented.
+- **Status:** **MITIGATED.** Inserted context explicitly calls history untrusted reference data, says not to follow contained instructions, escapes forged delimiter strings, encloses the selected synthesized brief in `<memory_context>`, and separates the current question. Prompt injection cannot be completely prevented.
 
 - **Severity:** Medium
 - **Affected component:** Raw-conversation RAG, context builder, context insertion
@@ -189,9 +189,9 @@ The original audit-only pass added no persistent test. Remediation added negativ
 
 ## Post-Remediation Verification
 
-- Backend: **37/37 tests passed**.
+- Backend: **83/83 tests passed**.
 - Python compilation: **passed** for backend, scripts, and tests.
-- Extension: **32/32 tests passed** across 8 files.
+- Extension: **43/43 tests passed** across 8 files.
 - TypeScript strict typecheck: **passed**.
 - Production extension build: **passed**; required artifacts were regenerated.
 - Build-time and repository secret-pattern checks: **passed** without printing credential values.
@@ -217,6 +217,10 @@ Tighten extension runtime and URL validation, reduce default CORS origins, updat
 Production-grade identity cannot be fixed only with validation: authentication and server-derived authorization scope require an architectural addition. Meaningful multi-user rate limits/quotas also depend on that principal. Encrypted storage and durable key management require a deliberate data-lifecycle design. Prompt-injection mitigation can be layered into the existing retrieval/insertion architecture but cannot guarantee elimination.
 
 ## Controlled Demo Decision
+
+Document Memory adds authenticated, bounded local PDF parsing. It validates the PDF signature, sanitizes client filenames to basenames, rejects malformed, encrypted, and no-text documents, applies page/text/chunk limits, never follows URLs or executes embedded content, and stores no client filesystem path. Extracted text remains untrusted synthesis evidence. OCR is unsupported.
+
+Automatic export recovery additionally rejects unsafe archive paths, treats manifest placement as location rather than ownership, refuses multiple plausible binaries, and stores unresolved attachment metadata without claiming document contents. Opaque assets require a PDF signature before extraction. Filenames are rendered through text-only DOM APIs.
 
 **Conditionally acceptable for a controlled local hackathon demo** if all of the following hold:
 

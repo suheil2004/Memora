@@ -3,11 +3,12 @@ import { requestMemoraContext } from "./messaging";
 import { MemoraPanel } from "./panel";
 import { requireDraftQuery } from "./query";
 import { debug } from "./debug";
-import { applyContextSnapshot, createContextSnapshot, type RetrievedContextSnapshot } from "./context-insertion";
+import type { MemoryBrief } from "./api/types";
+import { applyContextSnapshot, createMemorySnapshot } from "./context-insertion";
 
 const adapter = new ChatGptAdapter();
 let panel: MemoraPanel;
-let retrievedSnapshot: RetrievedContextSnapshot | null = null;
+let retrievedQuery = "";
 
 async function retrieveMemory(): Promise<void> {
   debug("CONTENT", "retrieve button clicked");
@@ -18,7 +19,7 @@ async function retrieveMemory(): Promise<void> {
     debug("CONTENT", "extracted query", { queryLength: query.length });
     panel.showLoading();
     const response = await requestMemoraContext(query);
-    retrievedSnapshot = createContextSnapshot(response, query);
+    retrievedQuery = query;
     panel.showResults(response);
   } catch (error) {
     debug("CONTENT", "retrieval error", error instanceof Error ? error.message : "unknown error");
@@ -37,26 +38,27 @@ function friendlyRetrievalError(error: unknown): string {
   return "Memory retrieval failed. Try again.";
 }
 
-function useRetrievedContext(): void {
+function useRetrievedMemory(memory: MemoryBrief): void {
   debug("CONTENT", "use context button clicked");
   if (!adapter.isSupportedPage()) {
     panel.showInsertionError("This page is no longer supported by Memora.");
     return;
   }
-  if (!retrievedSnapshot) {
+  if (!retrievedQuery) {
     panel.showInsertionError("Retrieve usable memory before adding context.");
     return;
   }
+  const retrievedSnapshot = createMemorySnapshot(memory, retrievedQuery);
   const status = applyContextSnapshot(adapter, retrievedSnapshot);
-  if (status === "inserted") panel.showContextUsed();
-  else if (status === "already_inserted") panel.showContextUsed(true);
+  if (status === "inserted") panel.showMemoryUsed(memory.thread_id);
+  else if (status === "already_inserted") panel.showMemoryUsed(memory.thread_id, true);
   else if (status === "draft_changed") panel.showInsertionError("The ChatGPT draft changed after retrieval. Retrieve memory again to protect your edits.");
   else if (status === "missing_input") panel.showInsertionError("ChatGPT input was not found. Your draft was not changed.");
   else panel.showInsertionError("Memora could not update the ChatGPT draft. Your original draft was preserved.");
 }
 
 function start(): void {
-  panel = new MemoraPanel(() => void retrieveMemory(), useRetrievedContext);
+  panel = new MemoraPanel(() => void retrieveMemory(), useRetrievedMemory);
   if (!adapter.isSupportedPage()) {
     panel.showError("This page is not supported by Memora.");
     return;

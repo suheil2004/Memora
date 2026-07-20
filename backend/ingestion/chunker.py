@@ -34,6 +34,14 @@ class ConversationChunker:
                     break
 
             selected_messages = imported.messages[start:end]
+            source_timestamp = max(
+                (message.created_at for message in selected_messages if message.created_at),
+                default=(
+                    imported.conversation.updated_at
+                    or imported.conversation.created_at
+                    or imported.conversation.imported_at
+                ),
+            )
             chunks.append(
                 ConversationChunk(
                     id=new_id(),
@@ -42,6 +50,7 @@ class ConversationChunker:
                     content="\n".join(units[start:end]),
                     ordinal=len(chunks),
                     message_ids=tuple(message.id for message in selected_messages),
+                    created_at=source_timestamp,
                 )
             )
             if end >= len(units):

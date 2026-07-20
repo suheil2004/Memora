@@ -13,6 +13,14 @@ const validResponse = {
     score: 0.82,
     source_message_ids: ["message-1"],
   }],
+  memories: [{
+    thread_id: "thread-1", title: "Drone Detection Project", subject: "user",
+    summary: "A Raspberry Pi streams video while a CUDA laptop runs inference.",
+    key_details: ["Raspberry Pi handles streaming", "CUDA laptop handles inference"],
+    sources: [{ type: "conversation", conversation_id: "conv-1", conversation_title: "Drone Detection Project" }],
+    used_fallback: false,
+    latest_timestamp: "2026-07-01T12:00:00Z",
+  }],
 };
 
 afterEach(() => {
@@ -95,6 +103,11 @@ describe("MemoraApiClient", () => {
       embedding_model: "feature-hash-v1-1024",
       duration_seconds: 0.4,
       errors: ["one synthetic conversation was skipped"],
+      documents_found: 0, documents_imported: 0, documents_skipped: 0,
+      document_chunks_indexed: 0, document_references_missing: 0,
+      attachments_found: 0, attachments_imported: 0, pdf_references_found: 0,
+      pdf_binaries_resolved: 0, pdf_binaries_indexed: 0, attachments_metadata_only: 0,
+      attachments_ambiguous: 0, attachments_missing: 0, attachments_unsupported: 0,
     };
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify(summary), { status: 200 }),
@@ -128,11 +141,37 @@ describe("MemoraApiClient", () => {
         .importChatGPTHistory([new File(["[]"], "conversations.json")]),
     ).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
   });
+
+  it("uploads PDFs to the authenticated document endpoint", async () => {
+    const summary = {
+      documents_found: 1, documents_imported: 1, documents_skipped: 0,
+      document_chunks_indexed: 2, embedding_provider: "local",
+      embedding_model: "feature-hash-v1-1024", duration_seconds: 0.2, errors: [],
+    };
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify(summary), { status: 200 }),
+    );
+    const client = new MemoraApiClient("http://127.0.0.1:8765", "synthetic-token", fetchMock);
+    await expect(client.importDocuments([
+      new File(["%PDF-synthetic"], "practice.pdf", { type: "application/pdf" }),
+    ])).resolves.toEqual(summary);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/api/v1/import/documents");
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization")).toBe("Bearer synthetic-token");
+  });
 });
 
 describe("isContextResponse", () => {
   it("validates nested provenance", () => {
     expect(isContextResponse(validResponse)).toBe(true);
     expect(isContextResponse({ ...validResponse, results: [{ score: "high" }] })).toBe(false);
+    expect(isContextResponse({ ...validResponse, memories: [{ summary: 42 }] })).toBe(false);
+    expect(isContextResponse({
+      ...validResponse,
+      memories: [{ ...validResponse.memories[0], latest_timestamp: "not-a-date" }],
+    })).toBe(false);
+    expect(isContextResponse({
+      ...validResponse,
+      memories: [{ ...validResponse.memories[0], latest_timestamp: undefined }],
+    })).toBe(true);
   });
 });

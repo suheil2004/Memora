@@ -68,10 +68,47 @@ class RetrievalResultResponse(StrictModel):
     source_message_ids: list[str]
 
 
+class MemorySourceResponse(StrictModel):
+    type: Literal["conversation"] = "conversation"
+    conversation_id: str
+    conversation_title: str
+
+
+class DocumentMemorySourceResponse(StrictModel):
+    type: Literal["document"] = "document"
+    document_id: str
+    filename: str
+    page_start: int
+    page_end: int
+    parent_conversation_id: str | None
+
+
+class AttachmentMemorySourceResponse(StrictModel):
+    type: Literal["attachment"] = "attachment"
+    attachment_id: str
+    filename: str
+    mime_type: str | None
+    conversation_id: str
+    message_id: str
+    binary_resolution_status: Literal["resolved", "metadata_only", "ambiguous", "missing", "unsupported"]
+
+
+class MemoryBriefResponse(StrictModel):
+    thread_id: str
+    title: str
+    subject: str
+    summary: str
+    key_details: list[str]
+    sources: list[MemorySourceResponse | DocumentMemorySourceResponse | AttachmentMemorySourceResponse]
+    used_fallback: bool
+    latest_timestamp: datetime | None = None
+
+
 class ContextResponse(StrictModel):
     query: str
     context: str
     results: list[RetrievalResultResponse]
+    memories: list[MemoryBriefResponse]
 
 
 class BulkImportResponse(StrictModel):
@@ -80,6 +117,31 @@ class BulkImportResponse(StrictModel):
     conversations_skipped: int
     messages_imported: int
     chunks_indexed: int
+    embedding_provider: str
+    embedding_model: str
+    duration_seconds: float
+    errors: list[str]
+    documents_found: int = 0
+    documents_imported: int = 0
+    documents_skipped: int = 0
+    document_chunks_indexed: int = 0
+    document_references_missing: int = 0
+    attachments_found: int = 0
+    attachments_imported: int = 0
+    pdf_references_found: int = 0
+    pdf_binaries_resolved: int = 0
+    pdf_binaries_indexed: int = 0
+    attachments_metadata_only: int = 0
+    attachments_ambiguous: int = 0
+    attachments_missing: int = 0
+    attachments_unsupported: int = 0
+
+
+class DocumentImportResponse(StrictModel):
+    documents_found: int
+    documents_imported: int
+    documents_skipped: int
+    document_chunks_indexed: int
     embedding_provider: str
     embedding_model: str
     duration_seconds: float

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import re
 import zipfile
 from dataclasses import dataclass
@@ -16,7 +17,7 @@ from uuid import NAMESPACE_URL, uuid5
 from backend.interfaces import ImportedConversation
 from backend.models import Conversation, Message, MessageRole
 
-MAX_ARCHIVE_FILES = 1_000
+MAX_ARCHIVE_FILES = 5_000
 MAX_ARCHIVE_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
 MAX_JSON_BYTES = 50 * 1024 * 1024
 _CONVERSATION_FILE = re.compile(r"^(?:conversations(?:[-_]\d+)?|\d+)\.json$", re.I)
@@ -96,7 +97,10 @@ class ChatGPTExportImporter:
             entries = archive.infolist()
             if len(entries) > MAX_ARCHIVE_FILES:
                 raise ChatGPTExportError("ZIP export contains too many files")
-            if sum(entry.file_size for entry in entries) > MAX_ARCHIVE_UNCOMPRESSED_BYTES:
+            max_uncompressed = int(os.environ.get(
+                "MEMORA_CHATGPT_MAX_UNCOMPRESSED_BYTES", MAX_ARCHIVE_UNCOMPRESSED_BYTES
+            ))
+            if sum(entry.file_size for entry in entries) > max_uncompressed:
                 raise ChatGPTExportError("ZIP export is too large when uncompressed")
             documents: list[tuple[str, Any]] = []
             for entry in entries:

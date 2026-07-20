@@ -1,10 +1,15 @@
 """Typed boundaries between Memora domain services and implementations."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Protocol, Sequence
 
-from backend.models import Conversation, ConversationChunk, Message, StructuredMemory
+from backend.models import (
+    AttachmentSource, Conversation, ConversationChunk, DocumentChunk, MemoryBrief, MemoryFact,
+    MemoryThread,
+    Message, StructuredMemory,
+)
 
 Embedding = tuple[float, ...]
 
@@ -25,6 +30,13 @@ class RetrievalResult:
     conversation_title: str | None = None
     user_id: str | None = None
     source_message_ids: tuple[str, ...] = ()
+    source_created_at: datetime | None = None
+    document_id: str | None = None
+    document_filename: str | None = None
+    page_start: int | None = None
+    page_end: int | None = None
+    trusted_entity_codes: tuple[str, ...] = ()
+    attachment_sources: tuple[AttachmentSource, ...] = ()
 
 
 class ConversationImporter(Protocol):
@@ -66,6 +78,17 @@ class VectorStore(Protocol):
 
     def delete_conversation(self, conversation_id: str, *, user_id: str) -> None: ...
 
+    def search_course_scope(
+        self,
+        course_code: str,
+        *,
+        user_id: str,
+        limit: int,
+        query_embedding: Embedding | None = None,
+        embedding_provider: str | None = None,
+        embedding_model: str | None = None,
+    ) -> Sequence[RetrievalResult]: ...
+
 
 class MemoryExtractor(Protocol):
     def extract(self, conversation: Conversation, messages: Sequence[Message]) -> Sequence[StructuredMemory]: ...
@@ -80,6 +103,14 @@ class MemoryRetriever(Protocol):
         limit: int,
         min_similarity: float = 0.0,
     ) -> Sequence[RetrievalResult]: ...
+
+
+class MemorySynthesizer(Protocol):
+    def synthesize(self, query: str, thread: MemoryThread) -> MemoryBrief: ...
+
+
+class MemoryFactExtractor(Protocol):
+    def extract(self, thread: MemoryThread) -> Sequence[MemoryFact]: ...
 
 
 class ContextBuilder(Protocol):

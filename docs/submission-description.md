@@ -2,7 +2,7 @@
 
 ## One-Sentence Pitch
 
-Memora is a personalized memory layer for AI that retrieves relevant context from your previous conversations.
+Memora is a transparent, user-controlled memory layer that retrieves, organizes, synthesizes, and sources relevant context from previous AI conversations.
 
 ## 30-Word Description
 
@@ -10,11 +10,11 @@ Memora gives ChatGPT continuity across conversations by semantically retrieving 
 
 ## 50-Word Description
 
-Memora is a user-controlled memory layer for ChatGPT. It imports previous conversations, creates semantic embeddings, and retrieves the history relevant to a new question. A Chrome extension shows the matching conversation and lets the user explicitly insert compact context, while the local backend keeps API credentials out of the browser.
+Memora is a user-controlled memory layer for ChatGPT. It imports previous conversations, retrieves and organizes relevant history into sourced synthesized memories, and lets the user explicitly insert one selected brief. Its local backend keeps API credentials out of the browser.
 
 ## 150-Word Description
 
-Context is often fragmented across AI conversations: a technical setup described last week, a preference recorded in another thread, or a decision buried in a long history. Memora makes that context available without becoming another chatbot. Users explicitly import ChatGPT exports into a local FastAPI backend, where conversations are normalized, split into provenance-preserving chunks, embedded, and stored in SQLite. When a user writes a new question in ChatGPT and clicks **Retrieve Memory**, Memora embeds the query and uses semantic RAG to rank relevant historical chunks for that user. The Chrome extension presents the matching conversation and compact context. Nothing is inserted until the user clicks **Use This Context**, and Memora never automatically submits the message. OpenAI `text-embedding-3-small` powers semantic retrieval in the demo, while a deterministic local provider keeps tests offline. Memora adds continuity to an existing conversational AI assistant while preserving explicit control over retrieval, insertion, and final submission.
+Context is often fragmented across AI conversations: a technical setup described last week, a preference recorded in another thread, or a decision buried in a long history. Memora makes that context available without becoming another chatbot. Users explicitly import ChatGPT exports into a local FastAPI backend, where conversations are normalized, chunked with provenance, embedded, and stored in SQLite. Retrieval uses semantic relevance or a narrow exact-entity course scope, then hybrid reranking and conservative MemoryThread grouping. Each selected thread is synthesized independently into a sourced MemoryBrief. The extension presents up to five separate cards; nothing is inserted until the user chooses one and clicks **Use This Context**, and Memora never automatically submits. OpenAI powers semantic embeddings and optional synthesis in the demo, while deterministic local providers keep tests offline.
 
 ## The Problem
 
@@ -32,8 +32,9 @@ ChatGPT History
   -> Chunk
   -> Embed
   -> Store
-  -> Semantic Retrieval
-  -> Relevant Memory
+  -> Semantic or Entity-Scoped Retrieval
+  -> Hybrid Reranking and MemoryThreads
+  -> Sourced MemoryBrief Cards
   -> Use This Context
 ```
 
@@ -80,6 +81,7 @@ Codex was used iteratively for repository scaffolding, the first end-to-end vert
 - Structured durable-memory extraction is designed as a separate boundary but is not active.
 - End-to-end encryption is not implemented.
 - Memora does not automatically access ChatGPT history; users explicitly select supported export files.
+- Supported ChatGPT exports automatically recover historical attachment context. Safely resolved text PDFs are indexed with page provenance; unresolved attachments retain filename/type/conversation provenance without claims about contents. Manual PDF import remains optional for additional documents. Scanned PDFs and OCR are not supported.
 
 ## Future Direction
 

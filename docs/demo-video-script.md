@@ -26,7 +26,7 @@ Target duration: 2–3 minutes.
 
 **On screen:** Show **Drone Detection Project** and the relevant retrieved details.
 
-**Narration:** “Memora semantically searched my previous conversations and found the relevant project without requiring the exact original wording. It retrieves a focused result with source provenance instead of dumping my entire history into the prompt.”
+**Narration:** “Memora searched my previous conversations, organized the relevant evidence, and synthesized a concise sourced memory without dumping raw conversation history into the prompt.”
 
 ## 1:15–1:40 — Use This Context
 
@@ -43,6 +43,8 @@ Target duration: 2–3 minutes.
 **Narration:** “Users can explicitly select a supported ChatGPT JSON or ZIP export. Memora sends it to their local backend, reconstructs the conversations, prevents unchanged duplicate imports, and indexes the history into searchable memory. It does not automatically access the user's ChatGPT account.”
 
 Do not run a large live import during the recording.
+
+Show one ChatGPT history import reporting attachments discovered, PDFs automatically indexed, and attachment-only memories. Explain that opaque assets are linked conservatively and extracted locally. Optionally show **Import additional PDFs** as a fallback for documents outside the export; scanned PDFs are not supported.
 
 ## 2:05–2:30 — Architecture and Validation
 

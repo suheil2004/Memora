@@ -8,7 +8,7 @@ AI assistants lose context across sessions. People repeatedly re-explain project
 
 ## The Solution
 
-Memora imports previous AI conversations, splits them into provenance-preserving chunks, and uses semantic retrieval to select only the history relevant to the current draft. A Chrome extension lets the user explicitly retrieve and insert that compact context into ChatGPT.
+Memora is a transparent, user-controlled memory layer that retrieves, organizes, synthesizes, and sources relevant context from explicitly imported AI conversations. A Chrome extension lets the user review distinct memory cards and explicitly insert one selected brief into ChatGPT.
 
 ## Demo Flow
 
@@ -84,6 +84,16 @@ The calibration command uses the current `OPENAI_API_KEY` only through the
 backend embedding provider and never prints it. Unknown and semantic embedding
 spaces require an explicit measured floor; Memora does not assume their score
 distributions are interchangeable.
+
+Memory-thread synthesis is configured separately from embeddings. Offline
+development defaults to deterministic bounded briefs. To enable production
+OpenAI synthesis, configure a chat model explicitly; the embedding model is
+never reused as a synthesis model:
+
+```powershell
+$env:MEMORA_SYNTHESIS_PROVIDER = "openai"
+$env:MEMORA_SYNTHESIS_MODEL = "gpt-5.6-luna"
+```
 
 ## Local Setup
 
@@ -190,6 +200,7 @@ Memora does not currently implement end-to-end encryption.
 - ChatGPT export schemas may change.
 - Only the ChatGPT adapter is implemented.
 - Structured durable-memory extraction is modeled but not part of the active retrieval pipeline.
+- Supported ChatGPT exports are inspected for historical attachment metadata. Memora preserves trusted filename/type/conversation provenance even when a binary is unavailable, and automatically indexes a PDF only when one opaque exported asset resolves unambiguously and passes a local PDF-signature check. Scanned or image-only PDFs require OCR and are not supported.
 
 ## Conversation JSON Format
 
@@ -210,6 +221,25 @@ The direct import endpoint accepts one conversation with a required ID and non-e
 Sensitive API calls require `Authorization: Bearer <MEMORA_LOCAL_TOKEN>`. The caller cannot select the database user scope. Retrieval queries are limited to 2,000 characters, `top_k` to 1–10, and history imports to 10 selected files. In-process limits allow 60 retrievals per minute and 10 imports per 10 minutes by default. These controls protect the local demo but are not distributed production rate limiting.
 
 The current MVP is designed for local single-user use. Bind it only to `127.0.0.1`; do not expose it directly to a LAN or the public internet.
+
+Retrieval responses include a `memories` array of synthesized, user-facing briefs alongside the legacy `context` and `results` fields. The extension displays up to five memory cards and inserts only the brief selected with that card's **Use This Context** button. It does not expose internal relevance scores or raw retrieved chunks in the panel, and it never submits the ChatGPT draft automatically.
+
+The active product flow is: conversation history plus recovered attachment metadata and resolvable PDFs → provenance-preserving chunks → embeddings → semantic or entity-scoped retrieval → hybrid reranking → MemoryThread grouping → per-thread synthesis → sourced MemoryBrief cards → explicit user-controlled context insertion. Only bounded extracted text chunks, never whole PDF binaries, are sent to the configured embedding provider.
+
+ChatGPT ZIP import understands message `metadata.attachments`, `library_files.json`, the opaque-asset filename map, and manifest locations. Strong identifiers and origin metadata are preferred; ambiguous mappings are never guessed. Direct authenticated `POST /api/v1/import/documents` remains an optional way to import additional PDFs that were not part of history.
+
+For large already-extracted exports, use the local directory CLI instead of uploading the archive through Chrome or HTTP:
+
+```powershell
+$env:MEMORA_DATABASE_URL = "sqlite:///./memora-real.sqlite3"
+$env:MEMORA_USER_ID = "demo-user"
+$env:MEMORA_EMBEDDING_PROVIDER = "openai"
+$env:OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+$env:OPENAI_API_KEY = "<set-locally>"
+python -m scripts.import_chatgpt_export "C:\path\to\extracted-chatgpt-export"
+```
+
+The CLI reads numbered shards one at a time and uses the same conversation importer, attachment resolver, PDF extractor, embedding provider, deduplication, and additive SQLite store as the API. It prints aggregate counts only. Use the same user, database, provider, and model that created existing vectors; an incompatible embedding identity is rejected before import.
 
 ## Tests
 

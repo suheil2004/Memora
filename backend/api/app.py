@@ -14,11 +14,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.api.schemas import (
+    AttachmentMemorySourceResponse,
     ContextResponse,
     BulkImportResponse,
     ContextRetrieveRequest,
     ConversationImportRequest,
     ImportResponse,
+    MemoryBriefResponse,
+    MemorySourceResponse,
+    DocumentMemorySourceResponse,
+    DocumentImportResponse,
     RetrievalResultResponse,
 )
 from backend.api.service import MemoraService
@@ -34,6 +39,9 @@ from backend.ingestion.chatgpt_export import ChatGPTExportError
 from backend.rag.context_builder import CompactContextBuilder
 from backend.rag.openai_embeddings import EmbeddingConfigurationError
 from backend.rag.provider import create_embedding_service
+from backend.rag.synthesis import create_memory_synthesizer
+from backend.rag.memory_facts import create_memory_fact_extractor
+from backend.ingestion.pdf_documents import DocumentImportError, DocumentLimits
 
 
 _MAX_VALIDATION_ERRORS = 10
@@ -55,6 +63,8 @@ def build_service() -> MemoraService:
         store=SQLiteVectorStore(database_path),
         context_builder=CompactContextBuilder(),
         context_max_chars=_positive_int("MEMORA_CONTEXT_MAX_CHARS", 6000),
+        synthesizer=create_memory_synthesizer(),
+        fact_extractor=create_memory_fact_extractor(),
     )
 
 
@@ -167,7 +177,52 @@ def create_app(
                 )
                 for result in data.results
             ]
-            return ContextResponse(query=data.query, context=data.context, results=results)
+            memories = [
+                MemoryBriefResponse(
+                    thread_id=brief.thread_id,
+                    title=brief.title,
+                    subject=brief.subject,
+                    summary=brief.summary,
+                    key_details=list(brief.key_details),
+                    sources=[
+                        MemorySourceResponse(
+                            conversation_id=conversation_id,
+                            conversation_title=title,
+                        )
+                        for conversation_id, title in zip(
+                            brief.source_conversation_ids, brief.sources, strict=True
+                        )
+                    ] + [
+                        DocumentMemorySourceResponse(
+                            document_id=source.document_id,
+                            filename=source.filename,
+                            page_start=source.page_start,
+                            page_end=source.page_end,
+                            parent_conversation_id=source.parent_conversation_id,
+                        )
+                        for source in brief.document_sources
+                    ] + [
+                        AttachmentMemorySourceResponse(
+                            attachment_id=source.attachment_id,
+                            filename=source.filename,
+                            mime_type=source.mime_type,
+                            conversation_id=source.conversation_id,
+                            message_id=source.message_id,
+                            binary_resolution_status=source.binary_resolution_status.value,
+                        )
+                        for source in brief.attachment_sources
+                    ],
+                    used_fallback=brief.used_fallback,
+                    latest_timestamp=brief.latest_timestamp,
+                )
+                for brief in data.briefs
+            ]
+            return ContextResponse(
+                query=data.query,
+                context=data.context,
+                results=results,
+                memories=memories,
+            )
         except IncompatibleEmbeddingError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except HTTPException:
@@ -197,7 +252,10 @@ def create_app(
             for upload in files:
                 data = await upload.read()
                 total_bytes += len(data)
-                if total_bytes > 250 * 1024 * 1024:
+                max_upload_bytes = int(os.environ.get(
+                    "MEMORA_CHATGPT_MAX_UPLOAD_BYTES", 250 * 1024 * 1024
+                ))
+                if total_bytes > max_upload_bytes:
                     raise HTTPException(status_code=413, detail="uploaded export exceeds the size limit")
                 uploads.append((upload.filename or "upload", data))
             summary = service().import_chatgpt_history(tuple(uploads), user_id=user_id)
@@ -208,6 +266,45 @@ def create_app(
             raise
         except Exception as exc:
             raise HTTPException(status_code=500, detail="ChatGPT history import failed") from exc
+        finally:
+            for upload in files:
+                await upload.close()
+
+    @application.post("/api/v1/import/documents", response_model=DocumentImportResponse)
+    async def import_documents(
+        files: list[UploadFile] = File(...),
+        parent_conversation_id: str | None = None,
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> DocumentImportResponse:
+        user_id = security.authenticate(authorization)
+        limits = DocumentLimits.from_environment()
+        if not files:
+            raise HTTPException(status_code=422, detail="at least one PDF is required")
+        if len(files) > limits.max_files:
+            raise HTTPException(status_code=422, detail=f"at most {limits.max_files} PDFs may be imported at once")
+        enforce_rate_limit(
+            limiter, f"{user_id}:import", limit=security.import_limit,
+            window_seconds=security.import_window_seconds,
+        )
+        uploads: list[tuple[str, bytes, str | None]] = []
+        total_bytes = 0
+        try:
+            for upload in files:
+                data = await upload.read(limits.max_file_bytes + 1)
+                if len(data) > limits.max_file_bytes:
+                    raise HTTPException(status_code=413, detail="PDF exceeds the individual file size limit")
+                total_bytes += len(data)
+                if total_bytes > limits.max_total_bytes:
+                    raise HTTPException(status_code=413, detail="total PDF upload exceeds the size limit")
+                uploads.append((upload.filename or "document.pdf", data, parent_conversation_id))
+            summary = service().import_documents(tuple(uploads), user_id=user_id)
+            return DocumentImportResponse.model_validate(asdict(summary))
+        except DocumentImportError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="Document import failed") from exc
         finally:
             for upload in files:
                 await upload.close()

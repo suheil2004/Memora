@@ -11,9 +11,11 @@ from backend.api.service import MemoraService
 from backend.database.sqlite_store import SQLiteVectorStore
 from backend.ingestion.chunker import ConversationChunker
 from backend.ingestion.json_importer import JsonConversationImporter
+from backend.interfaces import RetrievalResult
 from backend.rag.context_builder import CompactContextBuilder
 from backend.rag.local_embeddings import LocalHashEmbeddingService
 from backend.rag.openai_embeddings import EmbeddingConfigurationError
+from backend.rag.reranker import extract_course_codes
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,6 +85,23 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
         body = response.json()
+        self.assertNotIn("briefs", body)
+        self.assertNotIn("threads", body)
+        self.assertEqual(len(body["memories"]), 1)
+        memory = body["memories"][0]
+        self.assertEqual(memory["title"], "Drone Detection Project")
+        self.assertEqual(memory["subject"], "user")
+        self.assertTrue(memory["summary"])
+        self.assertTrue(memory["key_details"])
+        self.assertEqual(memory["latest_timestamp"], "2026-07-01T12:00:00Z")
+        self.assertEqual(memory["sources"], [{
+            "type": "conversation",
+            "conversation_id": "conv_drone_001",
+            "conversation_title": "Drone Detection Project",
+        }])
+        self.assertNotIn("score", memory)
+        self.assertNotIn("source_message_ids", memory)
+        self.assertNotIn("source_chunk_ids", memory)
         self.assertIn("Drone Detection Project", body["context"])
         result = body["results"][0]
         self.assertEqual(result["user_id"], "demo-user")
@@ -127,6 +146,136 @@ class ApiTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200, response.text)
                 self.assertEqual(response.json()["results"], [])
                 self.assertEqual(response.json()["context"], "")
+                self.assertEqual(response.json()["memories"], [])
+
+    def test_service_uses_larger_internal_pool_then_limits_distinct_results(self) -> None:
+        candidates = tuple(
+            RetrievalResult(
+                content=f"assignment detail {index}",
+                score=0.9 - index / 100,
+                source_kind="chunk",
+                source_id=f"chunk-{index}",
+                conversation_id="same-conversation" if index < 3 else f"conversation-{index}",
+                conversation_title="Assignment Notes" if index < 3 else f"Source {index}",
+                user_id="demo-user",
+                source_message_ids=(f"message-{index}",),
+            )
+            for index in range(8)
+        )
+        recording = RecordingRetriever(candidates)
+        self.service.retriever = recording
+
+        response = self.service.retrieve_context(
+            "assignment", user_id="demo-user", top_k=3, min_similarity=-1.0
+        )
+
+        self.assertEqual(recording.limit, 20)
+        self.assertEqual(len(response.results), 3)
+        self.assertEqual(len({item.conversation_id for item in response.results}), 3)
+        self.assertEqual(response.results[0].source_message_ids, ("message-0",))
+        self.assertIn("Assignment Notes", response.context)
+        self.assertIsNotNone(response.timing)
+        self.assertGreaterEqual(response.timing.total_ms, response.timing.synthesis_ms)
+
+        expanded = self.service.retrieve_context(
+            "assignment", user_id="demo-user", top_k=10, min_similarity=-1.0
+        )
+        self.assertEqual(recording.limit, 20)
+        self.assertEqual(len(expanded.threads), 5)
+        self.assertEqual(len(expanded.results), 5)
+        self.assertEqual(len(expanded.briefs), 5)
+        self.assertTrue(all(brief.used_fallback for brief in expanded.briefs))
+        self.assertEqual(
+            [brief.thread_id for brief in expanded.briefs],
+            [thread.thread_id for thread in expanded.threads],
+        )
+
+    def test_entity_dominant_course_query_uses_exact_user_scoped_chunks_only(self) -> None:
+        conversations = (
+            ("comp-assignment", "COMP 472 Assignment", "My COMP472 assignment covered search algorithms."),
+            ("comp-exam", "COMP-472 Practice Exam", "My COMP 472 practice exam covered heuristics."),
+            ("comp-project", "COMP 472 Course Project", "My COMP-472 project evaluated an AI agent."),
+            ("engr-project", "ENGR 290 Project", "My ENGR 290 project used Firebase."),
+            ("firebase", "Android Coursework", "My Firebase Android application was coursework."),
+        )
+        for conversation_id, title, content in conversations:
+            self.service.import_conversation({
+                "conversation_id": conversation_id,
+                "title": title,
+                "messages": [{"role": "user", "content": content}],
+            }, user_id="demo-user")
+        query_calls = self.service.embeddings.embed_query_calls
+
+        response = self.service.retrieve_context(
+            "Tell me about COMP 472", user_id="demo-user", top_k=5, min_similarity=1.0
+        )
+
+        self.assertEqual(self.service.embeddings.embed_query_calls, query_calls)
+        self.assertEqual(len(response.threads), 3)
+        self.assertTrue(all(
+            "COMP 472" in {
+                code for text in (thread.title, *thread.supporting_chunks)
+                for code in extract_course_codes(text)
+            }
+            for thread in response.threads
+        ))
+        self.assertNotIn(
+            "engr-project", {result.conversation_id for result in response.results}
+        )
+
+        engr_response = self.service.retrieve_context(
+            "Tell me about ENGR 290", user_id="demo-user", top_k=5, min_similarity=1.0
+        )
+        self.assertEqual(
+            {result.conversation_id for result in engr_response.results}, {"engr-project"}
+        )
+
+    def test_task_query_ranks_within_conversation_level_course_scope(self) -> None:
+        conversations = (
+            ("comp-exam", "COMP 472 Artificial Intelligence", "My practice exam covered search algorithms and machine learning."),
+            ("comp-assignment", "COMP 472 Artificial Intelligence", "My assignment implemented a game-search agent."),
+            ("control-exam", "COEN 311 Control Systems", "My practice exam covered root locus and Routh-Hurwitz."),
+            ("firebase", "ENGR 290 Project", "My project built a Firebase Android application."),
+        )
+        for conversation_id, title, content in conversations:
+            self.service.import_conversation({
+                "conversation_id": conversation_id,
+                "title": title,
+                "messages": [{"role": "user", "content": content}],
+            }, user_id="demo-user")
+
+        response = self.service.retrieve_context(
+            "What practice exams did I discuss for COMP 472?",
+            user_id="demo-user", top_k=5, min_similarity=1.0,
+        )
+
+        result_ids = [result.conversation_id for result in response.results]
+        self.assertEqual(result_ids[0], "comp-exam")
+        self.assertEqual(set(result_ids), {"comp-exam", "comp-assignment"})
+        self.assertNotIn("COMP 472", response.results[0].content)
+        self.assertNotIn("control-exam", result_ids)
+        self.assertNotIn("firebase", result_ids)
+
+    def test_multi_course_conversation_requires_unambiguous_chunk_evidence(self) -> None:
+        self.service.import_conversation({
+            "conversation_id": "shared-courses",
+            "title": "Shared Academic Discussion",
+            "messages": [
+                {"role": "user", "content": "COMP 472 and COEN 352 were both discussed. " + "overview " * 90},
+                {"role": "user", "content": "COMP 472 assignment used heuristic search. " + "detail " * 90},
+                {"role": "user", "content": "This unlabelled practice exam chunk is ambiguous. " + "practice " * 90},
+            ],
+        }, user_id="demo-user")
+
+        response = self.service.retrieve_context(
+            "What assignments did I work on for COMP 472?",
+            user_id="demo-user", top_k=5, min_similarity=1.0,
+        )
+
+        self.assertEqual(len(response.results), 1)
+        self.assertIn("COMP 472 assignment", response.results[0].content)
+        self.assertNotIn("both discussed", response.results[0].content)
+        self.assertNotIn("unlabelled practice exam", response.results[0].content)
 
     def test_retrieval_is_user_isolated(self) -> None:
         imported = self.client.post("/api/v1/conversations/import", json=self._conversation())
@@ -359,6 +508,16 @@ class CountingLocalEmbeddingService(LocalHashEmbeddingService):
     def embed_documents(self, texts):
         self.embed_document_calls += 1
         return super().embed_documents(texts)
+
+
+class RecordingRetriever:
+    def __init__(self, candidates: tuple[RetrievalResult, ...]) -> None:
+        self.candidates = candidates
+        self.limit: int | None = None
+
+    def retrieve(self, query, *, user_id, limit, min_similarity):
+        self.limit = limit
+        return self.candidates[:limit]
 
 
 if __name__ == "__main__":

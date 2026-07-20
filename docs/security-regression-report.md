@@ -36,7 +36,7 @@ Testing used disposable SQLite databases, synthetic `user-a`/`user-b` records, l
 
 - **Result:** **PARTIAL** (mitigation holds structurally; risk cannot be eliminated)
 - **Original finding:** Instruction-like historical text entered the downstream prompt without an explicit trust boundary.
-- **Remediation:** Concise untrusted-reference warning, instruction disclaimer, escaped `<historical_memory>` delimiter strings, one historical block, separate current question, explicit retrieve/use clicks, no automatic submission.
+- **Remediation:** Concise untrusted-reference warning, instruction disclaimer, escaped `<memory_context>` delimiter strings, one selected-memory block, separate current question, explicit retrieve/use clicks, no automatic submission.
 - **Regression tests attempted:** Normal harmless instruction-like sentence; opening delimiter; closing delimiter; nested open/close pair; text containing `Current question:`.
 - **Evidence/result:** Each case produced exactly one real opening/closing historical boundary. Forged exact delimiters became visually distinct characters. Historical content stayed before the real closing tag, and the actual current question remained after it. Existing tests confirm changed-draft, duplicate-insertion, and manual-action behavior.
 - **Residual risk:** “Current question:” or other persuasive text can still appear semantically inside the data block, and a downstream LLM may follow it despite the warning. Delimiters are prompt structure, not an enforceable model security boundary.
@@ -128,8 +128,8 @@ Testing used disposable SQLite databases, synthetic `user-a`/`user-b` records, l
 
 ## Product Regression
 
-- Backend tests: **37/37 passed**.
-- Extension tests: **32/32 passed** across 8 files.
+- Backend tests: **83/83 passed**.
+- Extension tests: **43/43 passed** across 8 files.
 - Python compilation: **passed**.
 - TypeScript strict typecheck: **passed**.
 - Production extension build and built-in secret checks: **passed**.

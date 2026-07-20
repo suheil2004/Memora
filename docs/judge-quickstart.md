@@ -135,3 +135,5 @@ Memora never submits automatically.
 - The local bearer token is not production multi-user authentication.
 - Bind Memora only to `127.0.0.1`; do not expose this MVP to a LAN or public network.
 - ChatGPT integration depends on DOM selectors that may change.
+- Supported ChatGPT ZIP exports automatically recover attachment metadata and safely resolvable text PDFs. The popup reports indexed PDFs and metadata-only attachments. **Import additional PDFs** is an optional fallback; scanned/image-only PDFs and OCR are not supported.
+- Very large extracted exports should be imported directly on the local machine with `python -m scripts.import_chatgpt_export "<export-directory>"`, using the same `MEMORA_DATABASE_URL`, `MEMORA_USER_ID`, and embedding configuration as the backend.

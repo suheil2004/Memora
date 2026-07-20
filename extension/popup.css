@@ -57,5 +57,7 @@ button:disabled { opacity: .55; cursor: wait; }
 #import-status.error strong { color: var(--memora-danger); }
 #import-status span { color: var(--memora-muted); }
 #import-status ul { margin: 4px 0 0; padding-left: 18px; color: var(--memora-warning); }
+#document-import-form { margin-top: var(--memora-space-3); padding-top: var(--memora-space-2); border-top: 1px solid var(--memora-border); }
+#document-import-status { display: grid; gap: 5px; margin-top: var(--memora-space-2); font-size: 12px; overflow-wrap: anywhere; }
 @keyframes memora-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { button { transition: none; } #import-status.importing::before { animation: none; } }

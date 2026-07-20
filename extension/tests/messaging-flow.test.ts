@@ -18,6 +18,10 @@ const apiResponse = {
     score: 0.82,
     source_message_ids: ["message-1"],
   }],
+  memories: [{ thread_id: "thread-1", title: "Drone Detection Project", subject: "user",
+    summary: "A Raspberry Pi streams the feed and a CUDA laptop runs inference.",
+    key_details: ["Raspberry Pi 4 streams the camera feed.", "Windows laptop with CUDA performs inference."],
+    sources: [{ type: "conversation", conversation_id: "conv-drone", conversation_title: "Drone Detection Project" }], used_fallback: false }],
 };
 
 const exactBackendResponse = {
@@ -38,6 +42,10 @@ User previously discussed:
     score: 0.6348452862421988,
     source_message_ids: ["message-drone-1"],
   }],
+  memories: [{ thread_id: "thread-drone", title: "Drone Detection Project", subject: "user",
+    summary: "The Pi streams camera video to a Windows CUDA laptop for inference.",
+    key_details: ["A Raspberry Pi 4 streams the camera feed.", "A Windows laptop with CUDA performs inference."],
+    sources: [{ type: "conversation", conversation_id: "conv_drone_001", conversation_title: "Drone Detection Project" }], used_fallback: false }],
 };
 
 function dependencies(fetchImpl: typeof fetch): BackgroundDependencies {
@@ -147,7 +155,6 @@ describe("content-to-background retrieval messaging", () => {
 
     const root = document.querySelector<HTMLElement>("#memora-extension-root")!.shadowRoot!;
     const status = root.querySelector<HTMLElement>("#memora-status")!;
-    const useContext = root.querySelector<HTMLButtonElement>("#memora-use-context")!;
     expect(response).toEqual(exactBackendResponse);
     expect(status.dataset.state).toBe("results");
     expect(root.textContent).toContain("Drone Detection Project");
@@ -155,6 +162,6 @@ describe("content-to-background retrieval messaging", () => {
     expect(root.textContent).toContain("A Windows laptop with CUDA performs inference.");
     expect(root.textContent).not.toContain("No relevant memory found");
     expect(root.textContent).not.toContain("Memory retrieval failed");
-    expect(useContext.hidden).toBe(false);
+    expect(root.textContent).toContain("Use This Context");
   });
 });

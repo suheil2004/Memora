@@ -1,4 +1,5 @@
 import io
+import json
 import tempfile
 import unittest
 import zipfile
@@ -59,6 +60,37 @@ class ChatGPTExportImporterTests(unittest.TestCase):
         )
         self.assertEqual(batch.conversations_found, 4)
         self.assertEqual(len(batch.conversations), 3)
+
+    def test_structured_attachment_metadata_and_binary_assets_are_not_indexed(self) -> None:
+        conversation = [{
+            "id": "synthetic-attachment-boundary",
+            "title": "Synthetic Course",
+            "messages": [{
+                "id": "message-one",
+                "role": "user",
+                "content": {
+                    "content_type": "multimodal_text",
+                    "parts": [
+                        "Discuss the synthetic practice exam.",
+                        {"asset_pointer": "file-service://synthetic", "name": "private.pdf"},
+                    ],
+                },
+            }],
+        }]
+        archive_bytes = io.BytesIO()
+        with zipfile.ZipFile(archive_bytes, "w") as archive:
+            archive.writestr("export/conversations.json", json.dumps(conversation))
+            archive.writestr("export/private.pdf", b"synthetic binary document")
+
+        batch = ChatGPTExportImporter().import_uploads(
+            (("chatgpt-export.zip", archive_bytes.getvalue()),), user_id="user-one"
+        )
+
+        self.assertEqual(len(batch.conversations), 1)
+        self.assertEqual(
+            [message.content for message in batch.conversations[0].messages],
+            ["Discuss the synthetic practice exam."],
+        )
 
     def test_unsafe_zip_path_is_rejected_without_extraction(self) -> None:
         archive_bytes = io.BytesIO()

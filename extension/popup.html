@@ -38,6 +38,12 @@
           <button id="import-submit" type="submit">Import history</button>
         </form>
         <div id="import-status" role="status" aria-live="polite"></div>
+        <form id="document-import-form">
+          <label for="document-files">Additional PDF documents</label>
+          <input id="document-files" type="file" accept=".pdf,application/pdf" multiple required>
+          <button id="document-import-submit" type="submit">Import additional PDFs</button>
+        </form>
+        <div id="document-import-status" role="status" aria-live="polite"></div>
         <p class="privacy-note">Your file is sent only to your local Memora backend.</p>
       </section>
     </main>

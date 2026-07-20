@@ -12,6 +12,7 @@ dependencies = [
     "httpx>=0.27,<1",
     "openai>=1.0.0,<3",
     "python-multipart>=0.0.20,<1",
+    "pypdf>=6.0,<7",
     "uvicorn>=0.30,<1",
 ]
 

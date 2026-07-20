@@ -13,8 +13,9 @@ ChatGPT page
   -> Manifest V3 service worker
   -> local FastAPI API
   -> embedding provider
-  -> cosine retrieval over SQLite
-  -> compact context
+  -> semantic or exact entity-scoped retrieval over SQLite
+  -> MemoryThread grouping and per-thread synthesis
+  -> sourced MemoryBrief cards
   -> explicit insertion into ChatGPT draft
 
 User-selected JSON/ZIP export
@@ -39,6 +40,8 @@ User-selected JSON/ZIP export
 | Server-configured `MEMORA_USER_ID` | Integrity as the effective local database scope |
 | Memora local token | Confidentiality; local API authentication only |
 | Imported files | Safe parsing, bounded resource use, no unintended persistence |
+| Extracted PDF text and document provenance | Confidentiality, integrity, user scope, bounded processing |
+| Historical attachment metadata and opaque export assets | Correct conversation ownership, path containment, ambiguity refusal |
 | Retrieval provenance | Integrity and correct association with source/user |
 
 ## Trust Boundaries
@@ -70,6 +73,8 @@ User-selected JSON/ZIP export
 - `POST /api/v1/import/chatgpt`
 - `POST /api/v1/context/retrieve`
 - Multipart parsing and in-memory upload collection
+- Local PDF parsing of untrusted text-based documents
+- Conservative correlation of untrusted ChatGPT attachment, library, filename-map, and manifest metadata
 - JSON and ZIP parsing, archive metadata, graph traversal, and normalization
 - SQLite reads/writes and embedding serialization
 - Extension popup settings and file picker
@@ -90,7 +95,7 @@ User-selected JSON/ZIP export
 | ZIP traversal or decompression bomb | No extraction; traversal, entry, per-file, and declared uncompressed limits | Upload is still read into memory; parser/resource risk remains bounded but material |
 | SQL injection through identifiers/text | Parameterized SQL | Low residual injection risk in reviewed queries |
 | Script injection in extension UI | Dynamic values use `textContent`; Shadow DOM panel | Low residual DOM injection risk in reviewed rendering |
-| Indirect prompt injection from memory | Explicit untrusted-data warning, escaped historical delimiters, separate question, explicit insertion | LLMs may still follow instruction-like data |
+| Indirect prompt injection from memory | Per-thread synthesis boundary, trusted provenance attachment, explicit untrusted-data warning, escaped memory delimiters, separate question, explicit insertion | LLMs may still follow instruction-like data |
 | Service worker fetches arbitrary targets | Exact localhost:8765 URL validation plus narrow manifest permissions | Compromised extension context can still call the configured local API with its stored token |
 | Secret leaks into browser bundle | Key only read server-side; ignores and scan | Developer process/source-map mistakes remain possible |
 | Backend exposed to LAN | Documentation uses `127.0.0.1` | Launching Uvicorn on `0.0.0.0` expands every unauthenticated risk |
