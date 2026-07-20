@@ -103,3 +103,8 @@ Durable structured-fact extraction remains a separate future boundary. The activ
 - Dedicated local bearer authentication and in-process abuse limits; no production multi-user authentication
 - Query limit 2,000 characters, `top_k` 1–10, and at most 10 selected import files
 - No encryption, background queue, cloud deployment, telemetry, or analytics
+## Privacy control plane
+
+`GET /api/v1/memory/stats` returns only user-scoped aggregate counts. `DELETE /api/v1/memory` accepts no body or client-selected user ID and transactionally removes the authenticated server-configured user's attachments, documents/document chunks, conversations/messages/chunks, and user row. Foreign-key ordering removes attachment links first, then documents, then conversations. Retrieval has no result cache, so subsequent requests observe the empty database immediately; deleting conversation rows also removes import fingerprints and permits later re-import.
+
+The popup requires an explicit confirmation click, disables destructive controls while the request is active, and notifies open ChatGPT content scripts to clear retrieved-card and used-memory state. It never removes text already inserted into the composer. Statistics and deletion use the same localhost bearer-token boundary as retrieval and import.

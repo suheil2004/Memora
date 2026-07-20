@@ -38,11 +38,12 @@ class LocalSecurityConfig:
         if not self.user_id:
             raise HTTPException(status_code=503, detail="Memora local user is not configured")
 
-    def authenticate(self, authorization: str | None) -> str:
+    def authenticate(self, authorization: list[str] | None) -> str:
         self.validate()
-        if authorization is None:
+        if authorization is None or len(authorization) != 1:
             raise _unauthorized()
-        scheme, separator, credential = authorization.partition(" ")
+        value = authorization[0]
+        scheme, separator, credential = value.partition(" ")
         if separator != " " or scheme.lower() != "bearer" or not credential or " " in credential:
             raise _unauthorized()
         if not secrets.compare_digest(credential, self.token):

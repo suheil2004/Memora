@@ -1,7 +1,9 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -12,6 +14,9 @@ from backend.database.sqlite_store import SQLiteVectorStore
 from backend.ingestion.chunker import ConversationChunker
 from backend.ingestion.json_importer import JsonConversationImporter
 from backend.interfaces import RetrievalResult
+from backend.models import (
+    Attachment, BinaryResolutionStatus, Document, DocumentChunk,
+)
 from backend.rag.context_builder import CompactContextBuilder
 from backend.rag.local_embeddings import LocalHashEmbeddingService
 from backend.rag.openai_embeddings import EmbeddingConfigurationError
@@ -66,6 +71,18 @@ class ApiTests(unittest.TestCase):
         allowed = response.headers["access-control-allow-headers"].lower()
         self.assertIn("authorization", allowed)
         self.assertIn("content-type", allowed)
+
+    def test_cors_does_not_allow_an_unlisted_web_origin(self) -> None:
+        response = self.client.options(
+            "/api/v1/context/retrieve",
+            headers={
+                "Origin": "https://malicious.example",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "authorization,content-type",
+            },
+        )
+
+        self.assertNotIn("access-control-allow-origin", response.headers)
 
     def test_import_and_retrieve_with_provenance(self) -> None:
         imported = self.client.post(
@@ -355,6 +372,17 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(missing_file.status_code, 422)
 
+    def test_chatgpt_upload_rejects_oversized_body(self) -> None:
+        with patch.dict(os.environ, {"MEMORA_CHATGPT_MAX_UPLOAD_BYTES": "32"}):
+            response = self.client.post(
+                "/api/v1/import/chatgpt",
+                files=[("files", ("conversations.json", b"x" * 100_000, "application/json"))],
+            )
+
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(response.json(), {"detail": "uploaded export exceeds the size limit"})
+        self.assertLess(len(response.content), 200)
+
     def test_sensitive_endpoints_require_valid_bearer_token(self) -> None:
         headers = self.client.headers.copy()
         self.client.headers.pop("Authorization")
@@ -390,6 +418,43 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(conversation_missing.status_code, 401)
         self.assertEqual(history_missing.status_code, 401)
+
+    def test_all_sensitive_endpoints_reject_missing_authentication(self) -> None:
+        requests = (
+            ("GET", "/api/v1/memory/stats", {}),
+            ("DELETE", "/api/v1/memory", {}),
+            ("POST", "/api/v1/conversations/import", {"json": self._conversation()}),
+            ("POST", "/api/v1/context/retrieve", {"json": {"query": "hello"}}),
+            ("POST", "/api/v1/import/chatgpt", {
+                "files": [("files", ("conversations.json", b"[]", "application/json"))],
+            }),
+            ("POST", "/api/v1/import/documents", {
+                "files": [("files", ("document.pdf", b"%PDF-invalid", "application/pdf"))],
+            }),
+        )
+        for method, path, kwargs in requests:
+            with self.subTest(path=path):
+                response = self.client.request(
+                    method, path, headers={"Authorization": ""}, **kwargs
+                )
+                self.assertEqual(response.status_code, 401, response.text)
+
+    def test_duplicate_and_very_long_authorization_values_are_rejected(self) -> None:
+        duplicate = self.client.get(
+            "/api/v1/memory/stats",
+            headers=[
+                ("Authorization", f"Bearer {self.token}"),
+                ("Authorization", f"Bearer {self.token}"),
+            ],
+        )
+        oversized = self.client.get(
+            "/api/v1/memory/stats",
+            headers={"Authorization": f"Bearer {'x' * 100_000}"},
+        )
+
+        self.assertEqual(duplicate.status_code, 401)
+        self.assertEqual(oversized.status_code, 401)
+        self.assertLess(len(oversized.content), 200)
 
     def test_query_and_top_k_limits_apply_before_embedding(self) -> None:
         calls_before = self.service.embeddings.embed_query_calls
@@ -493,6 +558,115 @@ class ApiTests(unittest.TestCase):
         payload["user_id"] = "user-b"
         response = self.client.post("/api/v1/conversations/import", json=payload)
         self.assertEqual(response.status_code, 422)
+
+    def test_authenticated_memory_stats_clear_isolation_and_reimport_flow(self) -> None:
+        payload = self._conversation()
+        self.assertEqual(
+            self.client.post("/api/v1/conversations/import", json=payload).status_code, 200
+        )
+        other_payload = {**payload, "conversation_id": "other-conversation"}
+        self.service.import_conversation(other_payload, user_id="other-user")
+        with self.service.store._connection() as db:
+            message_id = db.execute(
+                "SELECT id FROM messages WHERE conversation_id = ? AND user_id = ? LIMIT 1",
+                (payload["conversation_id"], "demo-user"),
+            ).fetchone()[0]
+        document = Document(
+            id="privacy-document", user_id="demo-user", filename="synthetic.pdf",
+            content_sha256="privacy-hash", parent_conversation_id=payload["conversation_id"],
+            page_count=1,
+        )
+        document_chunk = DocumentChunk(
+            id="privacy-document-chunk", document_id=document.id, user_id="demo-user",
+            filename=document.filename, parent_conversation_id=payload["conversation_id"],
+            page_start=1, page_end=1, content="Synthetic searchable document content.", ordinal=0,
+        )
+        vector = self.service.embeddings.embed_documents((document_chunk.content,))
+        self.service.store.save_document(
+            document, (document_chunk,), vector,
+            embedding_provider=self.service.embeddings.provider_name,
+            embedding_model=self.service.embeddings.model_name,
+        )
+        self.service.store.upsert_attachments((Attachment(
+            id="privacy-attachment", user_id="demo-user",
+            conversation_id=payload["conversation_id"], message_id=message_id,
+            original_filename="synthetic.pdf", mime_type="application/pdf", size_bytes=1,
+            library_file_id=None, document_id=document.id,
+            binary_resolution_status=BinaryResolutionStatus.RESOLVED,
+        ),))
+
+        unauthenticated = self.client.get(
+            "/api/v1/memory/stats", headers={"Authorization": ""}
+        )
+        wrong = self.client.get(
+            "/api/v1/memory/stats", headers={"Authorization": "Bearer wrong-token-value-000000"}
+        )
+        self.assertEqual(unauthenticated.status_code, 401)
+        self.assertEqual(wrong.status_code, 401)
+        self.assertEqual(
+            self.client.delete("/api/v1/memory", headers={"Authorization": ""}).status_code,
+            401,
+        )
+        self.assertEqual(
+            self.client.delete(
+                "/api/v1/memory",
+                headers={"Authorization": "Bearer wrong-token-value-000000"},
+            ).status_code,
+            401,
+        )
+        stats = self.client.get("/api/v1/memory/stats")
+        self.assertEqual(stats.status_code, 200, stats.text)
+        self.assertEqual(stats.json()["conversations"], 1)
+        self.assertGreater(stats.json()["conversation_chunks"], 0)
+        self.assertEqual(stats.json()["attachments"], 1)
+        self.assertEqual(stats.json()["documents"], 1)
+        self.assertEqual(stats.json()["document_chunks"], 1)
+
+        self.assertEqual(
+            self.client.delete("/api/v1/memory?user_id=other-user").status_code, 422
+        )
+        self.assertEqual(
+            self.client.request("DELETE", "/api/v1/memory", json={"user_id": "other-user"}).status_code,
+            422,
+        )
+        cleared = self.client.delete("/api/v1/memory")
+        self.assertEqual(cleared.status_code, 200, cleared.text)
+        self.assertTrue(cleared.json()["cleared"])
+        self.assertGreater(cleared.json()["rows_deleted"], 0)
+        with self.service.store._connection() as db:
+            for table in ("conversations", "messages", "chunks", "attachments", "documents", "document_chunks"):
+                self.assertEqual(
+                    db.execute(f"SELECT count(*) FROM {table} WHERE user_id = 'demo-user'").fetchone()[0],
+                    0,
+                )
+            self.assertGreater(
+                db.execute("SELECT count(*) FROM conversations WHERE user_id = 'other-user'").fetchone()[0],
+                0,
+            )
+            self.assertGreater(
+                db.execute("SELECT count(*) FROM chunks WHERE user_id = 'other-user'").fetchone()[0],
+                0,
+            )
+
+        empty = self.client.post(
+            "/api/v1/context/retrieve", json={"query": "drone detection CUDA", "top_k": 5}
+        )
+        self.assertEqual(empty.status_code, 200)
+        self.assertEqual(empty.json()["results"], [])
+        self.assertEqual(empty.json()["memories"], [])
+        self.assertEqual(empty.json()["context"], "")
+        repeated = self.client.delete("/api/v1/memory")
+        self.assertEqual(repeated.status_code, 200)
+        self.assertEqual(repeated.json()["rows_deleted"], 0)
+
+        reimported = self.client.post("/api/v1/conversations/import", json=payload)
+        self.assertEqual(reimported.status_code, 200, reimported.text)
+        retrieved = self.client.post(
+            "/api/v1/context/retrieve",
+            json={"query": "Where does drone detection inference run?", "top_k": 5},
+        )
+        self.assertEqual(retrieved.status_code, 200)
+        self.assertTrue(retrieved.json()["results"])
 
 
 class CountingLocalEmbeddingService(LocalHashEmbeddingService):

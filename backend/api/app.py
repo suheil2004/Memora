@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import logging
 from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
@@ -24,6 +25,8 @@ from backend.api.schemas import (
     MemorySourceResponse,
     DocumentMemorySourceResponse,
     DocumentImportResponse,
+    MemoryClearResponse,
+    MemoryStatisticsResponse,
     RetrievalResultResponse,
 )
 from backend.api.service import MemoraService
@@ -49,6 +52,7 @@ _MAX_VALIDATION_LOCATION_PARTS = 8
 _MAX_VALIDATION_LOCATION_CHARS = 64
 _MAX_VALIDATION_TYPE_CHARS = 64
 _MAX_VALIDATION_MESSAGE_CHARS = 160
+_LOGGER = logging.getLogger(__name__)
 
 
 def build_service() -> MemoraService:
@@ -97,7 +101,7 @@ def create_app(
         CORSMiddleware,
         allow_origins=origins,
         allow_credentials=False,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
     container = ServiceContainer(service_factory)
@@ -123,10 +127,43 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "memora"}
 
+    @application.get("/api/v1/memory/stats", response_model=MemoryStatisticsResponse)
+    def memory_statistics(
+        authorization: Annotated[list[str] | None, Header()] = None,
+    ) -> MemoryStatisticsResponse:
+        user_id = security.authenticate(authorization)
+        try:
+            response = MemoryStatisticsResponse.model_validate(
+                asdict(service().memory_statistics(user_id=user_id))
+            )
+            _LOGGER.info("memory_stats completed")
+            return response
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="Memory statistics failed") from exc
+
+    @application.delete("/api/v1/memory", response_model=MemoryClearResponse)
+    async def clear_memory(
+        request: Request,
+        authorization: Annotated[list[str] | None, Header()] = None,
+    ) -> MemoryClearResponse:
+        user_id = security.authenticate(authorization)
+        if "user_id" in request.query_params or (await request.body()).strip():
+            raise HTTPException(status_code=422, detail="This endpoint does not accept request data")
+        try:
+            summary = service().clear_memory(user_id=user_id)
+            _LOGGER.info("memory_clear completed rows_deleted=%d", summary.rows_deleted)
+            return MemoryClearResponse(cleared=True, rows_deleted=summary.rows_deleted)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="Memory deletion failed") from exc
+
     @application.post("/api/v1/conversations/import", response_model=ImportResponse)
     def import_conversation(
         request: ConversationImportRequest,
-        authorization: Annotated[str | None, Header()] = None,
+        authorization: Annotated[list[str] | None, Header()] = None,
     ) -> ImportResponse:
         user_id = security.authenticate(authorization)
         enforce_rate_limit(
@@ -149,7 +186,7 @@ def create_app(
     @application.post("/api/v1/context/retrieve", response_model=ContextResponse)
     def retrieve_context(
         request: ContextRetrieveRequest,
-        authorization: Annotated[str | None, Header()] = None,
+        authorization: Annotated[list[str] | None, Header()] = None,
     ) -> ContextResponse:
         user_id = security.authenticate(authorization)
         enforce_rate_limit(
@@ -233,7 +270,7 @@ def create_app(
     @application.post("/api/v1/import/chatgpt", response_model=BulkImportResponse)
     async def import_chatgpt(
         files: list[UploadFile] = File(...),
-        authorization: Annotated[str | None, Header()] = None,
+        authorization: Annotated[list[str] | None, Header()] = None,
     ) -> BulkImportResponse:
         user_id = security.authenticate(authorization)
         if not files:
@@ -248,13 +285,14 @@ def create_app(
         )
         uploads: list[tuple[str, bytes]] = []
         total_bytes = 0
+        max_upload_bytes = int(os.environ.get(
+            "MEMORA_CHATGPT_MAX_UPLOAD_BYTES", 250 * 1024 * 1024
+        ))
         try:
             for upload in files:
-                data = await upload.read()
+                remaining_bytes = max_upload_bytes - total_bytes
+                data = await upload.read(remaining_bytes + 1)
                 total_bytes += len(data)
-                max_upload_bytes = int(os.environ.get(
-                    "MEMORA_CHATGPT_MAX_UPLOAD_BYTES", 250 * 1024 * 1024
-                ))
                 if total_bytes > max_upload_bytes:
                     raise HTTPException(status_code=413, detail="uploaded export exceeds the size limit")
                 uploads.append((upload.filename or "upload", data))
@@ -274,7 +312,7 @@ def create_app(
     async def import_documents(
         files: list[UploadFile] = File(...),
         parent_conversation_id: str | None = None,
-        authorization: Annotated[str | None, Header()] = None,
+        authorization: Annotated[list[str] | None, Header()] = None,
     ) -> DocumentImportResponse:
         user_id = security.authenticate(authorization)
         limits = DocumentLimits.from_environment()

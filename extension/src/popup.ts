@@ -2,6 +2,7 @@ import { MemoraApiClient } from "./api/memora-client";
 import { renderImportError, renderImportSummary } from "./import-ui";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type MemoraSettings } from "./settings";
 import { MAX_IMPORT_FILES } from "./security";
+import { initializePrivacyControls } from "./privacy-controls";
 
 const form = required<HTMLFormElement>("#settings-form");
 const backendUrl = required<HTMLInputElement>("#backend-url");
@@ -18,11 +19,13 @@ const documentForm = required<HTMLFormElement>("#document-import-form");
 const documentFiles = required<HTMLInputElement>("#document-files");
 const documentButton = required<HTMLButtonElement>("#document-import-submit");
 const documentStatus = required<HTMLElement>("#document-import-status");
+const privacyControls = initializePrivacyControls();
 
 void loadSettings().then(async (settings) => {
   backendUrl.value = settings.backendUrl;
   localToken.value = settings.localToken;
   await checkConnection(settings);
+  await privacyControls.refresh();
 });
 
 form.addEventListener("submit", (event) => {
@@ -42,6 +45,7 @@ form.addEventListener("submit", (event) => {
       backendUrl.value = settings.backendUrl;
       localToken.value = settings.localToken;
       await checkConnection(settings, true);
+      await privacyControls.refresh();
     } catch {
       setConnection("offline");
       status.className = "helper error";
@@ -75,6 +79,7 @@ importForm.addEventListener("submit", (event) => {
       renderImportSummary(importStatus, summary);
       importFiles.value = "";
       setConnection("connected");
+      await privacyControls.refresh();
     } catch (error) {
       renderImportError(importStatus, friendlyImportError(error));
     } finally {
@@ -110,6 +115,7 @@ documentForm.addEventListener("submit", (event) => {
         documentStatus.append(errors);
       }
       documentFiles.value = "";
+      await privacyControls.refresh();
     } catch (error) {
       renderImportError(documentStatus, friendlyImportError(error));
     } finally {

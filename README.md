@@ -270,3 +270,8 @@ Codex was the primary engineering agent used to scaffold, implement, test, debug
 - [2–3 minute demo script](docs/demo-script.md)
 - [Fresh-start checklist](docs/fresh-start-checklist.md)
 - [Architecture](docs/architecture.md)
+## Privacy and memory controls
+
+The extension popup reports authenticated aggregate counts from the configured local Memora database and provides a two-step **Clear Memora data** action. Deletion removes the active user's imported conversations, messages, indexed conversation chunks and embeddings, attachments, documents, document chunks, and their embeddings. It does not delete `.env`, credentials, source files, manually created database backups, filesystem snapshots, or context text the user already inserted into ChatGPT.
+
+The database is local, but configured embedding, MemoryFact, or synthesis providers may process bounded memory content. Memora does not claim end-to-end encryption, zero-knowledge storage, forensic secure erasure, or deletion of external backups. Both memory statistics and deletion require `MEMORA_LOCAL_TOKEN`; user identity comes only from server-side `MEMORA_USER_ID`.

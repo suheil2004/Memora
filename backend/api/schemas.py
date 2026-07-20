@@ -146,3 +146,16 @@ class DocumentImportResponse(StrictModel):
     embedding_model: str
     duration_seconds: float
     errors: list[str]
+
+
+class MemoryStatisticsResponse(StrictModel):
+    conversations: int
+    conversation_chunks: int
+    attachments: int
+    documents: int
+    document_chunks: int
+
+
+class MemoryClearResponse(StrictModel):
+    cleared: bool
+    rows_deleted: int

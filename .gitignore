@@ -23,4 +23,6 @@ chatgpt-export*.zip
 *.pdf
 *.doc
 *.docx
+*.dat
+chatgpt-export*/
 !tests/fixtures/**/conversations.json

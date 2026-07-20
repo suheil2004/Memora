@@ -4,6 +4,7 @@ import { MemoraPanel } from "./panel";
 import { requireDraftQuery } from "./query";
 import { debug } from "./debug";
 import type { MemoryBrief } from "./api/types";
+import type { ContentControlRequest } from "./api/types";
 import { applyContextSnapshot, createMemorySnapshot } from "./context-insertion";
 
 const adapter = new ChatGptAdapter();
@@ -59,6 +60,7 @@ function useRetrievedMemory(memory: MemoryBrief): void {
 
 function start(): void {
   panel = new MemoraPanel(() => void retrieveMemory(), useRetrievedMemory);
+  chrome.runtime.onMessage.addListener(handleControlMessage);
   if (!adapter.isSupportedPage()) {
     panel.showError("This page is not supported by Memora.");
     return;
@@ -67,6 +69,20 @@ function start(): void {
   if (!adapter.hasDraftInput()) {
     panel.showIdle("Waiting for a question in ChatGPT.");
   }
+}
+
+function handleControlMessage(message: unknown): false {
+  if (isMemoryClearedMessage(message)) {
+    retrievedQuery = "";
+    panel.clearMemories();
+  }
+  return false;
+}
+
+function isMemoryClearedMessage(value: unknown): value is ContentControlRequest {
+  return typeof value === "object" && value !== null && !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    (value as { type?: unknown }).type === "MEMORA_MEMORY_CLEARED";
 }
 
 if (document.body) start();

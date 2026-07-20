@@ -92,7 +92,7 @@ User-selected JSON/ZIP export
 | Replace another user's conversation | Same server-derived scope applies to import/replacement | Anyone holding the local token has the single configured user's authority |
 | Consume OpenAI credits repeatedly | Authentication plus in-process retrieval/import limits | Per-process limiter is not distributed or durable |
 | Send a very large query/conversation | 2,000-character query cap, top-k 1–10, message/file limits | Aggregate import allowance remains intentionally generous for local history files |
-| ZIP traversal or decompression bomb | No extraction; traversal, entry, per-file, and declared uncompressed limits | Upload is still read into memory; parser/resource risk remains bounded but material |
+| ZIP traversal or decompression bomb | No extraction; traversal, entry, per-file, declared-uncompressed, and bounded multipart-read limits | Allowed local import sizes remain intentionally large; parser/resource risk remains bounded but material |
 | SQL injection through identifiers/text | Parameterized SQL | Low residual injection risk in reviewed queries |
 | Script injection in extension UI | Dynamic values use `textContent`; Shadow DOM panel | Low residual DOM injection risk in reviewed rendering |
 | Indirect prompt injection from memory | Per-thread synthesis boundary, trusted provenance attachment, explicit untrusted-data warning, escaped memory delimiters, separate question, explicit insertion | LLMs may still follow instruction-like data |
@@ -115,3 +115,6 @@ User-selected JSON/ZIP export
 ## Out-of-Scope Assumptions That Must Not Become Deployment Defaults
 
 The controlled-local-demo assumptions are not suitable for multi-user, LAN, hosted, or cloud operation. Any such deployment requires authenticated identity, server-derived authorization scope, abuse controls, encrypted transport appropriate to the environment, secure storage/lifecycle design, and a broader operational threat model.
+## Memory-control residual risks
+
+The privacy control center prevents single-click deletion and cross-user targeting at the API boundary. Correct row deletion does not erase manually copied databases, OS backups, cloud-synced historical versions, filesystem snapshots, or text previously inserted into a ChatGPT draft. SQLite `secure_delete` is defense in depth rather than a secure-erasure guarantee. A party holding the local bearer token can invoke deletion, so token and workstation protection remain user responsibilities.

@@ -1,4 +1,4 @@
-import type { BulkImportSummary, ContextResponse, DocumentImportSummary, ExtensionErrorCode, RetrieveRequest } from "./types";
+import type { BulkImportSummary, ContextResponse, DocumentImportSummary, ExtensionErrorCode, MemoryClearResponse, MemoryStatistics, RetrieveRequest } from "./types";
 
 export class MemoraApiError extends Error {
   constructor(
@@ -111,6 +111,43 @@ export class MemoraApiClient {
     if (!isDocumentImportSummary(value)) throw new MemoraApiError("INVALID_RESPONSE", "Memora returned a malformed document summary.");
     return value;
   }
+
+  async memoryStatistics(): Promise<MemoryStatistics> {
+    const response = await this.authenticatedRequest("/api/v1/memory/stats", "GET");
+    const value: unknown = await response.json().catch(() => null);
+    if (!isMemoryStatistics(value)) {
+      throw new MemoraApiError("INVALID_RESPONSE", "Memora returned malformed memory statistics.");
+    }
+    return value;
+  }
+
+  async clearMemory(): Promise<MemoryClearResponse> {
+    const response = await this.authenticatedRequest("/api/v1/memory", "DELETE");
+    const value: unknown = await response.json().catch(() => null);
+    if (!isRecord(value) || value.cleared !== true ||
+        typeof value.rows_deleted !== "number" || !Number.isInteger(value.rows_deleted) ||
+        value.rows_deleted < 0) {
+      throw new MemoraApiError("INVALID_RESPONSE", "Memora returned a malformed deletion response.");
+    }
+    return value as unknown as MemoryClearResponse;
+  }
+
+  private async authenticatedRequest(path: string, method: "GET" | "DELETE"): Promise<Response> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl.replace(/\/$/, "")}${path}`, {
+        method, headers: { "Authorization": `Bearer ${this.localToken}` },
+      });
+    } catch {
+      throw new MemoraApiError("BACKEND_UNREACHABLE", "Memora could not reach the local backend.");
+    }
+    if (!response.ok) {
+      throw new MemoraApiError(
+        "HTTP_ERROR", await safeErrorMessage(response) || `Memora request failed (${response.status}).`,
+      );
+    }
+    return response;
+  }
 }
 
 export function isContextResponse(value: unknown): value is ContextResponse {
@@ -162,6 +199,12 @@ function isDocumentImportSummary(value: unknown): value is DocumentImportSummary
     .every((key) => typeof value[key] === "number" && Number.isFinite(value[key])) &&
     typeof value.embedding_provider === "string" && typeof value.embedding_model === "string" &&
     Array.isArray(value.errors) && value.errors.every((error) => typeof error === "string");
+}
+
+function isMemoryStatistics(value: unknown): value is MemoryStatistics {
+  if (!isRecord(value)) return false;
+  return ["conversations", "conversation_chunks", "attachments", "documents", "document_chunks"]
+    .every((key) => typeof value[key] === "number" && Number.isInteger(value[key]) && value[key] >= 0);
 }
 
 function isMemorySource(value: unknown): boolean {

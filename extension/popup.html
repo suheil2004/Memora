@@ -46,6 +46,32 @@
         <div id="document-import-status" role="status" aria-live="polite"></div>
         <p class="privacy-note">Your file is sent only to your local Memora backend.</p>
       </section>
+      <section aria-labelledby="privacy-heading">
+        <div class="section-heading"><h2 id="privacy-heading">Privacy &amp; Memory</h2></div>
+        <p class="section-copy">Memora stores its imported memory in your configured local Memora database.</p>
+        <dl class="memory-stats" aria-label="Stored memory statistics">
+          <div><dt>Conversations</dt><dd id="memory-conversations">—</dd></div>
+          <div><dt>Attachments</dt><dd id="memory-attachments">—</dd></div>
+          <div><dt>Searchable documents</dt><dd id="memory-documents">—</dd></div>
+          <div class="secondary-stat"><dt>Conversation chunks</dt><dd id="memory-conversation-chunks">—</dd></div>
+          <div class="secondary-stat"><dt>Document chunks</dt><dd id="memory-document-chunks">—</dd></div>
+        </dl>
+        <div class="local-facts">
+          <p><strong>Local memory</strong><span>Your imported memory is stored in the configured local Memora database.</span></p>
+          <p><strong>Context control</strong><span>Memora inserts context only when you choose “Use This Context.”</span></p>
+        </div>
+        <button id="memory-clear" class="danger-secondary" type="button">Clear Memora data</button>
+        <div id="memory-clear-confirmation" class="clear-confirmation" hidden role="alertdialog" aria-labelledby="clear-memory-title" aria-describedby="clear-memory-description">
+          <strong id="clear-memory-title">Clear all Memora data?</strong>
+          <p id="clear-memory-description">This removes your imported conversations, indexed memories, attachments, and documents from Memora's active local database. Manually created backup database files are not affected. This action cannot be undone from within Memora.</p>
+          <div class="confirmation-actions">
+            <button id="memory-clear-cancel" class="neutral" type="button">Cancel</button>
+            <button id="memory-clear-confirm" class="danger" type="button">Delete all Memora data</button>
+          </div>
+        </div>
+        <p id="memory-status" class="helper" role="status" aria-live="polite"></p>
+        <p class="privacy-note">Deletion removes active Memora database rows, not manual backups or text already inserted into ChatGPT. Provider processing may still apply when configured for embeddings or synthesis.</p>
+      </section>
     </main>
     <script type="module" src="popup.js"></script>
   </body>

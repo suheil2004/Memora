@@ -158,6 +158,24 @@ describe("MemoraApiClient", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toContain("/api/v1/import/documents");
     expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization")).toBe("Bearer synthetic-token");
   });
+
+  it("loads aggregate memory statistics and sends one authenticated delete", async () => {
+    const memoryStats = {
+      conversations: 2, conversation_chunks: 4, attachments: 1,
+      documents: 1, document_chunks: 3,
+    };
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(memoryStats), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ cleared: true, rows_deleted: 11 }), { status: 200 }));
+    const client = new MemoraApiClient("http://127.0.0.1:8765", "synthetic-token", fetchMock);
+    await expect(client.memoryStatistics()).resolves.toEqual(memoryStats);
+    await expect(client.clearMemory()).resolves.toEqual({ cleared: true, rows_deleted: 11 });
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("GET");
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("DELETE");
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("Authorization"))
+      .toBe("Bearer synthetic-token");
+    expect(fetchMock.mock.calls[1]?.[1]?.body).toBeUndefined();
+  });
 });
 
 describe("isContextResponse", () => {

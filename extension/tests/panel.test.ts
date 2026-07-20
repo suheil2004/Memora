@@ -227,6 +227,18 @@ describe("polished Memora panel states", () => {
     expect(ui.uses[0]?.disabled).toBe(true);
   });
 
+  it("clears retrieved and used state without changing composer content", () => {
+    const panel = new MemoraPanel(vi.fn(), vi.fn());
+    panel.showResults(response);
+    panel.showMemoryUsed("thread-1");
+    panel.clearMemories();
+    const ui = elements();
+    expect(ui.root.textContent).not.toContain("Drone Detection Project");
+    expect(ui.uses).toHaveLength(0);
+    expect(ui.retrieve.textContent).toBe("Retrieve memory");
+    expect(ui.status.textContent).toContain("Memora data cleared");
+  });
+
   it("keeps one live panel so a detached stale instance cannot overwrite it", () => {
     const stalePanel = new MemoraPanel(vi.fn(), vi.fn());
     const currentPanel = new MemoraPanel(vi.fn(), vi.fn());

@@ -91,6 +91,21 @@ export interface DocumentImportSummary {
   errors: string[];
 }
 
+export interface MemoryStatistics {
+  conversations: number;
+  conversation_chunks: number;
+  attachments: number;
+  documents: number;
+  document_chunks: number;
+}
+
+export interface MemoryClearResponse {
+  cleared: true;
+  rows_deleted: number;
+}
+
+export type ContentControlRequest = { type: "MEMORA_MEMORY_CLEARED" };
+
 export type BackgroundRequest = { type: "MEMORA_RETRIEVE_CONTEXT"; query: string };
 export type ExtensionErrorCode =
   | "BACKEND_UNREACHABLE"

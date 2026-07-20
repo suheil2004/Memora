@@ -117,6 +117,15 @@ export class MemoraPanel {
       : "Memory added to your draft. Nothing was submitted.";
   }
 
+  clearMemories(): void {
+    this.currentMemories = [];
+    this.usedMemories.clear();
+    delete this.bubble.dataset.hasMemories;
+    this.action.disabled = false;
+    this.action.textContent = "Retrieve memory";
+    this.renderState("idle", "Memora data cleared. Retrieve after importing memory again.");
+  }
+
   showResults(response: ContextResponse): void {
     this.action.disabled = false;
     this.action.textContent = "Retrieve again";

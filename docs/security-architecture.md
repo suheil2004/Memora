@@ -13,7 +13,7 @@ Extension chrome.storage.local
   -> user-scoped MemoraService and SQLite operations
 ```
 
-`MEMORA_LOCAL_TOKEN` is separate from the OpenAI key, ChatGPT credentials, and browser cookies. Sensitive retrieval and import endpoints return 401 for missing, malformed, or invalid bearer credentials. `/health` remains unauthenticated so the local operator can distinguish process availability from credential configuration.
+`MEMORA_LOCAL_TOKEN` is separate from the OpenAI key, ChatGPT credentials, and browser cookies. Sensitive retrieval, import, statistics, and deletion endpoints return 401 for missing, malformed, duplicated, or invalid bearer credentials. `/health` remains unauthenticated so the local operator can distinguish process availability from credential configuration.
 
 Client request schemas no longer accept `user_id`. Extra fields are forbidden, so changing request content cannot change database authorization scope. The configured token represents full authority for one configured local user; it is not a multi-user account/session system.
 
@@ -34,7 +34,7 @@ Allowed backend origins are exactly:
 - `http://127.0.0.1:8765`
 - `http://localhost:8765`
 
-Credentials in URLs, other ports, paths, HTTP hosts, HTTPS hosts, and non-web schemes are rejected. Manifest permissions remain limited to HTTP loopback/localhost.
+Credentials in URLs, other ports, paths, HTTP hosts, HTTPS hosts, and non-web schemes are rejected. Manifest host permissions remain limited to HTTP loopback/localhost. The extension requests only the `storage` API permission; clearing visible cards broadcasts to tab IDs without reading privileged URL/title data, so the broader `tabs` permission is unnecessary.
 
 ## Resource and Credit Protection
 
@@ -48,7 +48,7 @@ Server-side schemas reject oversized values before the embedding service runs:
 - conversation ID: at most 200 characters;
 - selected history files: at most 10.
 
-Existing multipart, JSON, ZIP-entry, and declared-uncompressed limits remain active. A thread-safe in-process limiter permits, by default, 60 retrievals per 60 seconds and 10 imports per 600 seconds for the configured user. Rejected requests return 429 before embeddings. Environment variables can tune positive limits/windows.
+Existing multipart, JSON, ZIP-entry, and declared-uncompressed limits remain active. ChatGPT multipart reads are capped at the remaining aggregate upload allowance plus one byte, so rejection does not first materialize an arbitrarily oversized file in application memory. A thread-safe in-process limiter permits, by default, 60 retrievals per 60 seconds and 10 imports per 600 seconds for the configured user. Rejected requests return 429 before embeddings. Environment variables can tune positive limits/windows.
 
 This limiter is intentionally local and per-process. It is neither distributed nor durable and is not a substitute for production quotas.
 
@@ -93,3 +93,6 @@ Do not bind this design to `0.0.0.0` or expose it directly to a LAN/public inter
 - Default development CORS origins, FastAPI docs, and minimal security headers remain accepted/deferred local-development risks.
 - Synchronous imports can still use significant local resources within allowed bounds.
 - ChatGPT DOM selectors remain a non-public integration boundary.
+## Authenticated memory deletion
+
+Memory statistics and deletion require the existing bearer token and derive ownership from server-side `MEMORA_USER_ID`. The delete endpoint rejects request bodies and `user_id` query parameters, uses one SQLite transaction, and scopes every delete by user. `PRAGMA secure_delete=ON` improves ordinary SQLite page deletion behavior, but Memora does not promise forensic erasure from WAL/journal remnants, filesystem snapshots, storage-device remapping, or manual database backups. No token, authorization header, record identifier, title, filename, or content is logged; operational logging is limited to completion and an aggregate deleted-row count.

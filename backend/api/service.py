@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any
 
-from backend.database.sqlite_store import SQLiteVectorStore
+from backend.database.sqlite_store import (
+    MemoryClearSummary, MemoryStatistics, SQLiteVectorStore,
+)
 from backend.ingestion.chunker import ConversationChunker
 from backend.ingestion.json_importer import JsonConversationImporter
 from backend.ingestion.bulk_import import BulkImportSummary, ChatGPTBulkImportService
@@ -186,3 +188,9 @@ class MemoraService:
         return PDFDocumentImportService(self.embeddings, self.store).import_uploads(
             uploads, user_id=user_id
         )
+
+    def memory_statistics(self, *, user_id: str) -> MemoryStatistics:
+        return self.store.memory_statistics(user_id=user_id)
+
+    def clear_memory(self, *, user_id: str) -> MemoryClearSummary:
+        return self.store.clear_user_memory(user_id=user_id)

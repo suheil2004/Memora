@@ -137,3 +137,6 @@ Memora never submits automatically.
 - ChatGPT integration depends on DOM selectors that may change.
 - Supported ChatGPT ZIP exports automatically recover attachment metadata and safely resolvable text PDFs. The popup reports indexed PDFs and metadata-only attachments. **Import additional PDFs** is an optional fallback; scanned/image-only PDFs and OCR are not supported.
 - Very large extracted exports should be imported directly on the local machine with `python -m scripts.import_chatgpt_export "<export-directory>"`, using the same `MEMORA_DATABASE_URL`, `MEMORA_USER_ID`, and embedding configuration as the backend.
+## Privacy & Memory demo
+
+Open the extension popup to view safe local aggregate counts. Click **Clear Memora data** to show the confirmation state; the first click does not delete anything and **Cancel** returns safely. For destructive testing, first copy the SQLite database as a manual backup, then explicitly choose **Delete all Memora data**. Counts become zero, open retrieved-memory cards clear, and a new retrieval returns no history. The manual backup and any context already inserted into ChatGPT are intentionally unaffected; re-importing the export restores retrieval.

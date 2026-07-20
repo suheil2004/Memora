@@ -7,6 +7,7 @@ import math
 import sqlite3
 from collections.abc import Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -18,6 +19,20 @@ from backend.rag.reranker import extract_course_codes
 
 class IncompatibleEmbeddingError(ValueError):
     """Stored vectors do not match the active embedding space."""
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryStatistics:
+    conversations: int
+    conversation_chunks: int
+    attachments: int
+    documents: int
+    document_chunks: int
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryClearSummary:
+    rows_deleted: int
 
 
 class SQLiteVectorStore:
@@ -417,6 +432,44 @@ class SQLiteVectorStore:
                 "DELETE FROM conversations WHERE id = ? AND user_id = ?",
                 (conversation_id, user_id),
             )
+
+    def memory_statistics(self, *, user_id: str) -> MemoryStatistics:
+        with self._connection() as db:
+            counts = {
+                table: db.execute(
+                    f"SELECT count(*) FROM {table} WHERE user_id = ?", (user_id,)
+                ).fetchone()[0]
+                for table in (
+                    "conversations", "chunks", "attachments", "documents", "document_chunks"
+                )
+            }
+        return MemoryStatistics(
+            conversations=counts["conversations"],
+            conversation_chunks=counts["chunks"],
+            attachments=counts["attachments"],
+            documents=counts["documents"],
+            document_chunks=counts["document_chunks"],
+        )
+
+    def clear_user_memory(self, *, user_id: str) -> MemoryClearSummary:
+        """Transactionally remove one user's Memora-owned database records."""
+        with self._connection() as db:
+            db.execute("PRAGMA secure_delete = ON")
+            rows_deleted = sum(
+                db.execute(
+                    f"SELECT count(*) FROM {table} WHERE user_id = ?", (user_id,)
+                ).fetchone()[0]
+                for table in (
+                    "messages", "chunks", "attachments", "document_chunks",
+                    "documents", "conversations",
+                )
+            )
+            # Attachments link conversations and documents, so remove them first.
+            db.execute("DELETE FROM attachments WHERE user_id = ?", (user_id,))
+            db.execute("DELETE FROM documents WHERE user_id = ?", (user_id,))
+            db.execute("DELETE FROM conversations WHERE user_id = ?", (user_id,))
+            db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        return MemoryClearSummary(rows_deleted=rows_deleted)
 
     def search_course_scope(
         self,

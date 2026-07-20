@@ -78,11 +78,11 @@ Testing used disposable SQLite databases, synthetic `user-a`/`user-b` records, l
 
 ### SEC-008 — esbuild development-server advisory
 
-- **Result:** **DEFERRED**
+- **Result:** **FIXED**
 - **Original finding:** Locked esbuild `0.27.7` falls in a Low advisory range for its Windows development server.
-- **Remediation:** None in this pass; Memora uses esbuild's build API, not its development server.
+- **Remediation:** Updated the direct development dependency and lockfile to esbuild 0.28.1.
 - **Regression tests attempted:** `npm audit --package-lock-only` and build-script inspection.
-- **Result/residual risk:** One Low advisory remains, with a fix available. It affects development tooling behavior, not the production extension runtime or current build-only path.
+- **Result/residual risk:** A fresh `npm audit` reports zero vulnerabilities. Advisory results remain point-in-time checks.
 
 ### SEC-009 — Exposed API docs/minimal security headers
 
@@ -128,8 +128,8 @@ Testing used disposable SQLite databases, synthetic `user-a`/`user-b` records, l
 
 ## Product Regression
 
-- Backend tests: **83/83 passed**.
-- Extension tests: **43/43 passed** across 8 files.
+- Backend tests: **101/101 passed**.
+- Extension tests: **57/57 passed** across 9 files.
 - Python compilation: **passed**.
 - TypeScript strict typecheck: **passed**.
 - Production extension build and built-in secret checks: **passed**.
@@ -140,7 +140,7 @@ Testing used disposable SQLite databases, synthetic `user-a`/`user-b` records, l
 ## Dependency Status
 
 - **Python:** `pip-audit` reported no known vulnerabilities for the resolved project dependencies.
-- **npm:** one Low esbuild advisory, GHSA-g7r4-m6w7-qqqr, remains. It concerns the affected Windows development-server path. Memora invokes the build API and does not ship esbuild in the extension runtime.
+- **npm:** zero known vulnerabilities after upgrading esbuild to 0.28.1.
 - Advisory results are point-in-time checks, not guarantees.
 
 ## Public Deployment Blockers
@@ -157,7 +157,7 @@ Before Memora becomes LAN-accessible, cloud-hosted, public, or real multi-user, 
 8. Formal secret management for OpenAI and application credentials; do not rely on extension storage or process environment alone for public infrastructure.
 9. Broader indirect prompt-injection defenses, provenance-preserving presentation, policy for tool-capable downstream models, and explicit acknowledgement that prompt boundaries are not enforcement.
 10. Signed/reviewed extension distribution, update security, extension compromise response, minimized permissions, and browser-profile threat modeling.
-11. Dependency patch policy, including the deferred esbuild advisory, SBOM/advisory monitoring, and repeatable locked Python dependencies.
+11. Dependency patch policy, SBOM/advisory monitoring, and repeatable locked Python dependencies.
 12. Centralized redacted audit/operational logging, alerting, incident response, and tests proving secrets/content do not enter telemetry.
 
 ## Final Assessment
