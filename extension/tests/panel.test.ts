@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MemoraPanel } from "../src/panel";
+import { LOADING_STAGE_DELAYS_MS, LOADING_STAGE_MESSAGES, MemoraPanel } from "../src/panel";
 import type { ContextResponse } from "../src/api/types";
 
 const response: ContextResponse = {
@@ -138,9 +138,53 @@ describe("polished Memora panel states", () => {
     expect(ui.root.textContent).toContain("Relevant memories");
     expect(ui.retrieve.textContent).toBe("Retrieve memory");
     panel.showLoading();
-    expect(ui.status.textContent).toBe("Searching your memory...");
+    expect(ui.status.textContent).toBe(LOADING_STAGE_MESSAGES[0]);
     expect(ui.status.dataset.state).toBe("loading");
     expect(ui.retrieve.disabled).toBe(true);
+  });
+
+  it("advances loading copy calmly and clears stale timers after success", async () => {
+    vi.useFakeTimers();
+    const panel = new MemoraPanel(vi.fn(), vi.fn());
+    panel.showLoading();
+    let ui = elements();
+    expect(ui.status.textContent).toBe(LOADING_STAGE_MESSAGES[0]);
+    await vi.advanceTimersByTimeAsync(LOADING_STAGE_DELAYS_MS[0]);
+    expect(ui.status.textContent).toBe(LOADING_STAGE_MESSAGES[1]);
+    await vi.advanceTimersByTimeAsync(LOADING_STAGE_DELAYS_MS[1] - LOADING_STAGE_DELAYS_MS[0]);
+    expect(ui.status.textContent).toBe(LOADING_STAGE_MESSAGES[2]);
+
+    panel.showResults(response);
+    ui = elements();
+    expect(ui.status.textContent).toBe("Relevant memories found.");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(ui.status.textContent).toBe("Relevant memories found.");
+    expect(ui.retrieve.disabled).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it("clears loading timers on failure and restarts stages for a later request", async () => {
+    vi.useFakeTimers();
+    const panel = new MemoraPanel(vi.fn(), vi.fn());
+    panel.showLoading();
+    await vi.advanceTimersByTimeAsync(LOADING_STAGE_DELAYS_MS[0]);
+    expect(elements().status.textContent).toBe(LOADING_STAGE_MESSAGES[1]);
+    panel.showError("Authentication failed. Check your token.");
+    expect(elements().retrieve.disabled).toBe(false);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(elements().status.textContent).toBe("Authentication failed. Check your token.");
+
+    panel.showLoading();
+    expect(elements().status.textContent).toBe(LOADING_STAGE_MESSAGES[0]);
+    await vi.advanceTimersByTimeAsync(LOADING_STAGE_DELAYS_MS[0]);
+    expect(elements().status.textContent).toBe(LOADING_STAGE_MESSAGES[1]);
+    elements().bubble.click();
+    elements().minimize.click();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(elements().status.textContent).toBe(LOADING_STAGE_MESSAGES[1]);
+    elements().bubble.click();
+    expect(elements().panel.hidden).toBe(false);
+    vi.useRealTimers();
   });
 
   it("shows a readable result without raw scores or backend syntax", () => {

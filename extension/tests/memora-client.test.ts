@@ -86,7 +86,7 @@ describe("MemoraApiClient", () => {
     );
     await expect(
       new MemoraApiClient("http://localhost:8765", "synthetic-token", httpFetch).retrieve({ query: "q", top_k: 1 }),
-    ).rejects.toMatchObject({ code: "HTTP_ERROR" });
+    ).rejects.toMatchObject({ code: "CONFIGURATION_UNAVAILABLE" });
     await expect(
       new MemoraApiClient("http://localhost:8765", "synthetic-token", invalidFetch).retrieve({ query: "q", top_k: 1 }),
     ).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
@@ -175,6 +175,37 @@ describe("MemoraApiClient", () => {
     expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("Authorization"))
       .toBe("Bearer synthetic-token");
     expect(fetchMock.mock.calls[1]?.[1]?.body).toBeUndefined();
+  });
+
+  it("classifies authentication failures without exposing backend details", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ detail: "private authentication detail" }), { status: 401 }),
+    );
+    await expect(
+      new MemoraApiClient("http://127.0.0.1:8765", "wrong-token", fetchMock)
+        .memoryStatistics(),
+    ).rejects.toMatchObject({
+      code: "AUTHENTICATION_FAILED",
+      message: "The extension token does not match the local Memora service.",
+    });
+  });
+
+  it("aborts retrieval after the configured timeout", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation((_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+      })
+    );
+    const client = new MemoraApiClient(
+      "http://127.0.0.1:8765", "synthetic-token", fetchMock, 100,
+    );
+    const retrieval = client.retrieve({ query: "query", top_k: 1 });
+    const assertion = expect(retrieval).rejects.toMatchObject({ code: "REQUEST_TIMEOUT" });
+    await vi.advanceTimersByTimeAsync(100);
+    await assertion;
+    expect((fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal).aborted).toBe(true);
+    vi.useRealTimers();
   });
 });
 

@@ -1,5 +1,8 @@
 import type { BulkImportSummary, ContextResponse, DocumentImportSummary, ExtensionErrorCode, MemoryClearResponse, MemoryStatistics, RetrieveRequest } from "./types";
 
+export const RETRIEVAL_TIMEOUT_MS = 60_000;
+export const READINESS_TIMEOUT_MS = 10_000;
+
 export class MemoraApiError extends Error {
   constructor(
     readonly code: ExtensionErrorCode,
@@ -15,28 +18,30 @@ export class MemoraApiClient {
     private readonly baseUrl: string,
     private readonly localToken: string,
     private readonly fetchImpl: typeof fetch = globalThis.fetch.bind(globalThis),
+    private readonly retrievalTimeoutMs: number = RETRIEVAL_TIMEOUT_MS,
+    private readonly readinessTimeoutMs: number = READINESS_TIMEOUT_MS,
   ) {}
 
   async retrieve(request: RetrieveRequest): Promise<ContextResponse> {
     let response: Response;
     try {
-      response = await this.fetchImpl(`${this.baseUrl.replace(/\/$/, "")}/api/v1/context/retrieve`, {
+      response = await this.fetchWithTimeout(`${this.baseUrl.replace(/\/$/, "")}/api/v1/context/retrieve`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${this.localToken}`,
         },
         body: JSON.stringify(request),
-      });
-    } catch {
+      }, this.retrievalTimeoutMs);
+    } catch (error) {
+      if (error instanceof MemoraApiError) throw error;
       throw new MemoraApiError(
         "BACKEND_UNREACHABLE",
         "Memora could not reach the local backend. Confirm it is running and test the connection in Memora settings.",
       );
     }
     if (!response.ok) {
-      const message = await safeErrorMessage(response);
-      throw new MemoraApiError("HTTP_ERROR", message || `Memora request failed (${response.status}).`);
+      throw await responseError(response, `Memora request failed (${response.status}).`);
     }
     const value: unknown = await response.json().catch(() => null);
     if (!isContextResponse(value)) {
@@ -113,7 +118,9 @@ export class MemoraApiClient {
   }
 
   async memoryStatistics(): Promise<MemoryStatistics> {
-    const response = await this.authenticatedRequest("/api/v1/memory/stats", "GET");
+    const response = await this.authenticatedRequest(
+      "/api/v1/memory/stats", "GET", this.readinessTimeoutMs,
+    );
     const value: unknown = await response.json().catch(() => null);
     if (!isMemoryStatistics(value)) {
       throw new MemoraApiError("INVALID_RESPONSE", "Memora returned malformed memory statistics.");
@@ -132,21 +139,51 @@ export class MemoraApiClient {
     return value as unknown as MemoryClearResponse;
   }
 
-  private async authenticatedRequest(path: string, method: "GET" | "DELETE"): Promise<Response> {
+  private async authenticatedRequest(
+    path: string,
+    method: "GET" | "DELETE",
+    timeoutMs?: number,
+  ): Promise<Response> {
     let response: Response;
     try {
-      response = await this.fetchImpl(`${this.baseUrl.replace(/\/$/, "")}${path}`, {
+      const url = `${this.baseUrl.replace(/\/$/, "")}${path}`;
+      response = timeoutMs === undefined
+        ? await this.fetchImpl(url, {
+          method, headers: { "Authorization": `Bearer ${this.localToken}` },
+        })
+        : await this.fetchWithTimeout(url, {
         method, headers: { "Authorization": `Bearer ${this.localToken}` },
-      });
-    } catch {
+      }, timeoutMs);
+    } catch (error) {
+      if (error instanceof MemoraApiError) throw error;
       throw new MemoraApiError("BACKEND_UNREACHABLE", "Memora could not reach the local backend.");
     }
     if (!response.ok) {
-      throw new MemoraApiError(
-        "HTTP_ERROR", await safeErrorMessage(response) || `Memora request failed (${response.status}).`,
-      );
+      throw await responseError(response, `Memora request failed (${response.status}).`);
     }
     return response;
+  }
+
+  private async fetchWithTimeout(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number,
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timer = globalThis.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await this.fetchImpl(url, { ...init, signal: controller.signal });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new MemoraApiError(
+          "REQUEST_TIMEOUT",
+          "Memora did not respond within the allowed time.",
+        );
+      }
+      throw error;
+    } finally {
+      globalThis.clearTimeout(timer);
+    }
   }
 }
 
@@ -233,4 +270,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 async function safeErrorMessage(response: Response): Promise<string | null> {
   const body: unknown = await response.json().catch(() => null);
   return isRecord(body) && typeof body.detail === "string" ? body.detail : null;
+}
+
+async function responseError(response: Response, fallback: string): Promise<MemoraApiError> {
+  if (response.status === 401) {
+    return new MemoraApiError(
+      "AUTHENTICATION_FAILED",
+      "The extension token does not match the local Memora service.",
+    );
+  }
+  if (response.status === 409 || response.status === 503) {
+    return new MemoraApiError(
+      "CONFIGURATION_UNAVAILABLE",
+      "The local Memora service is not ready to use its configured memory provider.",
+    );
+  }
+  return new MemoraApiError("HTTP_ERROR", await safeErrorMessage(response) || fallback);
 }

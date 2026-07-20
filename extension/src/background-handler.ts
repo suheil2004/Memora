@@ -40,8 +40,16 @@ export async function handleBackgroundRequest(
         "Memora does not have permission to access the configured backend. Reload the extension and check its site access.",
       );
     }
+    const client = dependencies.createClient(settings.backendUrl, settings.localToken);
+    const statistics = await client.memoryStatistics();
+    if (Object.values(statistics).every((count) => count === 0)) {
+      return failure(
+        "NO_IMPORTED_MEMORY",
+        "No memory has been imported into the local Memora service.",
+      );
+    }
     debug("BACKGROUND", "starting API request", { backendUrl: settings.backendUrl });
-    const data = await dependencies.createClient(settings.backendUrl, settings.localToken).retrieve({
+    const data = await client.retrieve({
       query: message.query,
       top_k: settings.topK,
     });

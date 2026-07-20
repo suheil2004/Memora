@@ -42,10 +42,12 @@ button:focus-visible { outline: 3px solid rgba(98, 86, 217, .28); outline-offset
 button:disabled { opacity: .55; cursor: wait; }
 .status-pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 8px; background: var(--memora-surface); color: var(--memora-muted); font-size: 11px; font-weight: 650; }
 .status-pill > span:first-child { width: 7px; height: 7px; border-radius: 50%; background: #90939a; }
-.status-pill.connected { background: #eaf5ef; color: var(--memora-success); }
-.status-pill.connected > span:first-child { background: var(--memora-success); }
-.status-pill.offline { background: #f9ecee; color: var(--memora-danger); }
-.status-pill.offline > span:first-child { background: var(--memora-danger); }
+.status-pill.connected, .status-pill.ready { background: #eaf5ef; color: var(--memora-success); }
+.status-pill.connected > span:first-child, .status-pill.ready > span:first-child { background: var(--memora-success); }
+.status-pill.empty { background: #fbf4e5; color: var(--memora-warning); }
+.status-pill.empty > span:first-child { background: var(--memora-warning); }
+.status-pill.offline, .status-pill.authentication, .status-pill.unavailable { background: #f9ecee; color: var(--memora-danger); }
+.status-pill.offline > span:first-child, .status-pill.authentication > span:first-child, .status-pill.unavailable > span:first-child { background: var(--memora-danger); }
 .helper { min-height: 18px; margin-top: var(--memora-space-2); color: var(--memora-muted); font-size: 12px; overflow-wrap: anywhere; }
 .helper.error { color: var(--memora-danger); }
 .helper.success { color: var(--memora-success); }

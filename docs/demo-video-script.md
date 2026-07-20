@@ -1,79 +1,63 @@
-# Memora Demo Video Script
+# Memora 90-Second Demo Video Script
 
-Target duration: 2–3 minutes.
+Use a rehearsed synthetic or sanitized local database containing an original project design, an explicit updated/current design, and—when reliable—one recovered text PDF with page provenance. Do not run history import live.
 
-## 0:00–0:15 — Hook
+## 0:00–0:12 — Forgotten context
 
-**On screen:** A fresh ChatGPT conversation and the Memora panel.
+**On screen:** Briefly show an old project conversation, its later update/correction, and a historical PDF filename.
 
-**Narration:** “AI is powerful, but every new conversation can feel like starting over. Memora is a personalized memory layer that brings relevant context from your previous conversations into the AI chat you already use.”
+**Narration:** “Important context gets stranded across old AI conversations: the original plan, what changed, and the document that explained why.”
 
-## 0:15–0:35 — The Problem
+## 0:12–0:22 — Fresh conversation
 
-**On screen:** Show the synthetic **Drone Detection Project** conversation.
+**On screen:** Open fresh ChatGPT and type, without submitting:
 
-**Narration:** “In an older conversation, I documented this drone-detection setup: a Raspberry Pi 4 streams the camera footage, a Windows laptop with CUDA performs inference, and a pan-tilt mount tracks the detected aircraft. That context exists in my history, but it is not available in a fresh chat.”
+> What is the current drone inference setup, and what changed from the original design?
 
-## 0:35–1:15 — Core Demo
+**Narration:** “In a fresh chat, this question is ambiguous unless the assistant knows both versions.”
 
-**On screen:** Open a fresh ChatGPT conversation. Type, but do not submit:
-
-> Where was I running my model again?
-
-**Narration:** “This question only makes sense if the AI knows which project I'm referring to.”
+## 0:22–0:43 — Explicit retrieval
 
 **Action:** Click **Retrieve Memory**.
 
-**On screen:** Show **Drone Detection Project** and the relevant retrieved details.
+**Narration:** “Memora retrieves relevant evidence, separates distinct versions, identifies important facts, and prepares one sourced brief per memory.”
 
-**Narration:** “Memora searched my previous conversations, organized the relevant evidence, and synthesized a concise sourced memory without dumping raw conversation history into the prompt.”
+If elapsed-time loading copy appears, do not call it live backend progress. It is calm feedback while retrieval runs.
 
-## 1:15–1:40 — Use This Context
+## 0:43–1:04 — Show the difference
 
-**Action:** Click **Use This Context** and show the compact context inserted before the original question.
+**On screen:** Show the current-state MemoryBrief first, the historical related memory separately, and the **Discussed** timestamp. Expand **Sources** to reveal old/new conversations and, if present, the recovered PDF page.
 
-**Narration:** “Memora never automatically sends anything. Retrieval is explicit, context insertion is a separate explicit action, and I stay in control of when the message is submitted.”
+**Narration:** “The current design ranks first, the original remains available for a historical question, and every source is attached by Memora—not invented by the model. This is more than nearest-vector text.”
 
-**Action:** Review the draft, then submit manually.
+## 1:04–1:22 — User-controlled insertion
 
-## 1:40–2:05 — History Import
+**Action:** Click **Use This Context**. Highlight the bounded selected brief and unchanged original question in the composer.
 
-**On screen:** Open the Memora extension popup and point to **Import ChatGPT history**.
+**Narration:** “Only the memory I selected enters the draft. Memora treats history as untrusted reference data, and it never presses Send.”
 
-**Narration:** “Users can explicitly select a supported ChatGPT JSON or ZIP export. Memora sends it to their local backend, reconstructs the conversations, prevents unchanged duplicate imports, and indexes the history into searchable memory. It does not automatically access the user's ChatGPT account.”
+Do not submit automatically. A manual click may be shown only after reviewing the draft.
 
-Do not run a large live import during the recording.
+## 1:22–1:30 — Trust and close
 
-Show one ChatGPT history import reporting attachments discovered, PDFs automatically indexed, and attachment-only memories. Explain that opaque assets are linked conservatively and extracted locally. Optionally show **Import additional PDFs** as a fallback for documents outside the export; scanned PDFs are not supported.
+**On screen:** Briefly show popup **Ready** status and **Privacy & Memory** counts/clear control, then return to the panel.
 
-## 2:05–2:30 — Architecture and Validation
+**Narration:** “Memory is imported explicitly, sourced, inspectable, clearable, and always offered to the user.”
 
-**On screen:** Show the architecture diagram or repository overview.
+## Deterministic fallback
 
-**Narration:** “The Manifest V3 extension talks through its service worker to a local FastAPI backend. OpenAI embeddings power semantic RAG, and SQLite stores user-scoped conversation chunks and provenance. On our small 15-query MVP evaluation, the local lexical baseline achieved 46.7 percent Top-1 accuracy, while OpenAI semantic embeddings achieved 100 percent Top-1 and Top-3. This is a focused MVP evaluation, not a production benchmark.”
+If the temporal/PDF fixture is not fully reliable, use the proven question:
 
-## 2:30–End — Closing
+> Where was I running my model again?
 
-**On screen:** Return to the ChatGPT answer and Memora panel.
+Show **Drone Detection Project**, Raspberry Pi camera streaming, Windows CUDA inference, sources, and explicit insertion. A simpler reliable flow is preferable to an intermittent complex one.
 
-**Narration:** “Memora gives AI continuity across conversations while keeping memory retrieval under the user's control.”
+## Recording checklist
 
-## Demo Checklist
-
-Before recording:
-
-- [ ] Local backend is running on `http://127.0.0.1:8765`.
-- [ ] A fresh private OpenAI API key is configured only in the backend shell.
-- [ ] The production extension is rebuilt and reloaded in `chrome://extensions`.
-- [ ] The ChatGPT tab is refreshed after the extension reload.
-- [ ] **Drone Detection Project** is indexed for the backend's configured `demo-user` identity.
-- [ ] The same private Memora local token is configured in the backend shell and extension popup.
-- [ ] The popup reports **Connected**.
-- [ ] `Where was I running my model again?` is copied and ready.
-- [ ] **Retrieve Memory** has been tested once.
-- [ ] **Use This Context** has been tested once.
-- [ ] No real export, API key, console containing sensitive data, or personal database is visible on screen.
-
-## Emergency Fallback
-
-If OpenAI retrieval fails during recording, keep the already indexed database, confirm the backend is still running, and retry once. If the failure persists, pause recording and verify the API key, billing/quota, provider/model settings, and network connection. Do not modify application code during the recording.
+- [ ] Use a clean checkout and synthetic/sanitized demo database—not personal history.
+- [ ] Backend is bound to `http://127.0.0.1:8765` with provider configuration and quota validated.
+- [ ] Extension is built, reloaded in `chrome://extensions`, and the ChatGPT tab refreshed.
+- [ ] The popup reports **Ready**, using the same private local token as the backend.
+- [ ] Exact query, card ordering, current/historical sources, timestamps, insertion text, and fallback query are prevalidated.
+- [ ] No API key, bearer token, local path, console, browser-profile data, or real user content is visible.
+- [ ] Capture the panel, insertion result, and privacy/readiness popup as separate still images after recording.

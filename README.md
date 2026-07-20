@@ -1,249 +1,173 @@
 # Memora
 
-Memora is a personalized memory layer for AI that retrieves relevant context from your previous conversations.
+**Memora gives AI conversations continuity by finding the important current context in a user's history, preserving where it came from, and letting the user choose what to bring into a new chat.**
 
-## The Problem
+Memora is a transparent, user-controlled memory layer for ChatGPT. It imports conversation history and recoverable attachments, retrieves relevant evidence, separates distinct subjects and versions, extracts the facts that matter to the current question, interprets current versus historical state, and presents sourced MemoryBriefs. Nothing enters the ChatGPT composer until the user selects **Use This Context**, and Memora never presses Send.
 
-AI assistants lose context across sessions. People repeatedly re-explain projects, preferences, decisions, and history even when those details already exist in older conversations.
+> Memory should be retrieved → separated → prioritized → temporally interpreted → sourced → offered to the user—not silently injected.
 
-## The Solution
+## The problem
 
-Memora is a transparent, user-controlled memory layer that retrieves, organizes, synthesizes, and sources relevant context from explicitly imported AI conversations. A Chrome extension lets the user review distinct memory cards and explicitly insert one selected brief into ChatGPT.
+Useful context is fragmented across old AI conversations: a project architecture changed last month, a constraint lives in another thread, or a decision is buried beside an attached PDF. A fresh conversation cannot reliably distinguish the important current state from nearby but outdated history.
 
-## Demo Flow
+## See Memora in action
 
-```text
-Old conversations -> Memora -> semantic retrieval -> fresh ChatGPT conversation
-                                                     -> Retrieve Memory
-                                                     -> Use This Context
-```
+<img src="docs/assets/memora-panel.png" alt="Memora floating panel showing a sourced MemoryBrief" width="820">
 
-## Key Features
+*Memora retrieves and organizes relevant historical context into concise, sourced MemoryBriefs.*
 
-- ChatGPT JSON/ZIP history import with duplicate protection
-- OpenAI semantic embeddings and deterministic offline embeddings
-- User-scoped SQLite storage, ranking, deduplication, and provenance
-- Compact, size-bounded context construction
-- Manifest V3 Chrome extension with explicit retrieval and insertion
-- No automatic capture, injection, submission, analytics, or telemetry
+<img src="docs/assets/memora-use-this-context.png" alt="Memora context inserted into the ChatGPT composer after explicit user selection" width="820">
+
+*The user chooses which memory to bring forward. Memora inserts it into the draft but never submits automatically.*
+
+<img src="docs/assets/memora-privacy-readiness.png" alt="Memora popup showing authenticated readiness and privacy controls" width="820">
+
+*Authenticated readiness, local memory visibility, and explicit deletion controls.*
+
+## What Memora does
+
+- **Builds searchable history:** explicit ChatGPT JSON/ZIP import, normalization, role-aware chunking, duplicate protection, semantic embeddings, and user-scoped SQLite storage.
+- **Recovers document context:** conservative historical attachment discovery and automatic indexing of safely resolved text PDFs with document/page provenance; unresolved files remain metadata-only.
+- **Organizes memory:** semantic candidate retrieval, hybrid reranking, entity/course-aware scoping, MemoryThread separation, and query-time MemoryFact extraction.
+- **Prioritizes what matters:** salience, specificity, trusted timestamps, current-state/historical-query awareness, and explicit correction handling.
+- **Keeps evidence visible:** one sourced MemoryBrief per selected thread, trusted backend-attached provenance, and **Best match / Most recent** sorting.
+- **Keeps the user in control:** explicit retrieval, explicit **Use This Context** insertion, no automatic submit, authenticated readiness, and inspect/clear controls in **Privacy & Memory**.
+
+## Why Memora is more than vector search
+
+| Basic semantic RAG | Memora |
+| --- | --- |
+| Query → nearest chunks → prompt | Query → eligible evidence → distinct MemoryThreads → important MemoryFacts → current/historical prioritization → per-thread MemoryBriefs → trusted sources → user-selected insertion |
+
+Vector similarity finds candidates. Memora then prevents unrelated subjects and versions from being blended, identifies useful facts, preserves superseded history for historical questions, favors explicit current-state and correction evidence when appropriate, and attaches provenance outside model output. The user reviews the result before any context is inserted.
 
 ## Architecture
 
-```text
-ChatGPT
-  |
-Memora Chrome Extension
-  |
-FastAPI
-  |
-Embedding Service
-  |
-RAG Retriever
-  |
-SQLite Memory Store
+```mermaid
+flowchart TD
+    A[ChatGPT history + historical attachments/PDFs] --> B[Import, normalization, role-aware chunking]
+    B --> C[Embeddings + user-scoped SQLite memory store]
+    C --> D[Semantic candidate retrieval]
+    D --> E[Hybrid reranking + entity/course scoping]
+    E --> F[MemoryThreads: separate subjects, tasks, and versions]
+    F --> G[Query-time MemoryFacts]
+    G --> H[Salience + specificity + temporal/current-state ranking]
+    H --> I[Per-thread MemoryBrief synthesis]
+    I --> J[Backend-attached provenance + trusted timestamps]
+    J --> K[Memora Chrome extension]
+    K --> L[User selects Use This Context]
+    L --> M[Bounded context inserted into ChatGPT composer]
+    M --> N[User reviews and manually submits]
+
+    U[Historical text is untrusted evidence] -. bounded prompt boundary .-> G
+    U -. bounded prompt boundary .-> I
+    P[Models cannot supply trusted provenance] -. provenance attached by backend .-> J
+    K -. no automatic insertion or submit .-> N
 ```
 
-History ingestion follows a separate path:
+The extension content script communicates with a Manifest V3 service worker; only the worker calls the authenticated localhost FastAPI API. Provider credentials remain in the backend. See [the detailed architecture](docs/architecture.md) and [technical overview](docs/technical-overview.md).
 
-```text
-ChatGPT Export -> Importer -> Normalizer -> Chunker -> Embeddings -> SQLite
-```
+## The memory pipeline
 
-See [docs/architecture.md](docs/architecture.md) for the implemented boundaries and data flow.
+- **MemoryThreads** conservatively group evidence that belongs to the same subject and goal while separating different courses, tasks, projects, and explicit versions.
+- **MemoryFacts** are concise, user-centric facts extracted from only the selected evidence at query time. They are active in retrieval but ephemeral; durable persisted MemoryFacts are not implemented.
+- **Salience and specificity** favor historically important and concrete facts over filler or generic dialogue.
+- **Temporal awareness** uses trusted source timestamps and explicit language such as “current,” “updated,” or “original”; recency alone does not decide relevance.
+- **Corrections** can supersede sufficiently related older claims while retaining their merged provenance. Unresolved conflicts remain visible.
+- **MemoryBriefs** summarize each selected thread independently. The backend—not the model—attaches trusted conversation and document/page sources.
 
-## Retrieval Evaluation
+## Historical attachments and PDFs
 
-On the repository's small 15-query MVP evaluation dataset:
+When importing a supported ChatGPT export, Memora conservatively reconnects message attachment metadata with exported binaries using strong identifiers before unique metadata matches. A safely resolved, signature-validated text PDF can be indexed automatically and cited by document and page. Ambiguous or missing binaries are never guessed; their filename/type/conversation provenance can remain as metadata-only memory. Scanned/image-only PDFs, encrypted PDFs, OCR, remote URLs, and arbitrary embedded assets are not supported.
 
-- Local feature-hash baseline Top-1: **46.7%**
-- OpenAI `text-embedding-3-small` Top-1: **100%**
-- OpenAI `text-embedding-3-small` Top-3: **100%**
+## Strongest demo flow
 
-The evaluator also includes five synthetic no-match queries. With the calibrated
-local relevance floor, the local baseline abstains on **5/5** instead of forcing
-the nearest unrelated conversation into the result. Positive ranking accuracy
-and negative abstention are reported separately.
+1. Start a fresh ChatGPT conversation.
+2. Type a question about a project with an original and a current design; do not submit it.
+3. Click **Retrieve Memory**.
+4. Show the current-state MemoryBrief first and the historical related memory separately.
+5. Expand **Sources**, including a recovered PDF/page source when the prepared demo data contains one.
+6. Switch between **Best match** and **Most recent**.
+7. Click **Use This Context** and inspect the bounded context added to the composer.
+8. Submit manually; Memora never submits on the user's behalf.
 
-This is a demo regression dataset, not a production benchmark. Live OpenAI evaluation is opt-in and consumes API credits:
+Do not import private history live in the primary demo. Use a prevalidated synthetic or sanitized local database. See the [90-second video script](docs/demo-video-script.md) and [judge quickstart](docs/judge-quickstart.md).
 
-```powershell
-python -m scripts.evaluate_retrieval --provider local
-$env:OPENAI_API_KEY = "your-api-key"
-python -m scripts.evaluate_retrieval --provider openai
-```
+## Privacy and user control
 
-Before enabling abstention for a semantic provider, print raw scores from the
-existing database in read-only mode and calibrate its floor:
+- **Stored locally:** imported chats, indexed memory, embeddings, recovered document text, and provenance live in the configured local Memora SQLite database.
+- **Provider processing:** when OpenAI providers are configured, bounded text may be sent for embeddings, query-time MemoryFact extraction, and MemoryBrief synthesis. API keys remain in the backend process.
+- **User-controlled insertion:** retrieval and insertion are separate explicit actions. Nothing enters the ChatGPT composer until **Use This Context** is selected.
+- **No automatic submit:** Memora never presses Send and does not automatically capture conversations.
+- **Deletion:** **Clear Memora data** removes the active user's records from the active database. It does not delete manual backups, source exports, filesystem snapshots, credentials, or context already inserted into ChatGPT.
 
-```powershell
-python -m scripts.calibrate_relevance --provider openai --database .\memora.sqlite3 --user-id demo-user
-$env:MEMORA_RELEVANCE_MIN_SIMILARITY = "<measured-floor>"
-```
+Memora does not claim end-to-end encryption, zero-knowledge processing, all-on-device processing, or forensic secure erasure.
 
-The calibration command uses the current `OPENAI_API_KEY` only through the
-backend embedding provider and never prints it. Unknown and semantic embedding
-spaces require an explicit measured floor; Memora does not assume their score
-distributions are interchangeable.
+## Readiness and long-running retrieval
 
-Memory-thread synthesis is configured separately from embeddings. Offline
-development defaults to deterministic bounded briefs. To enable production
-OpenAI synthesis, configure a chat model explicitly; the embedding model is
-never reused as a synthesis model:
+The popup validates readiness with an authenticated local memory-statistics request—never public health alone—and does not trigger provider-backed retrieval. It distinguishes **Ready**, **No memory imported yet**, **Authentication failed**, **Memora is offline**, and **Configuration unavailable**.
 
-```powershell
-$env:MEMORA_SYNTHESIS_PROVIDER = "openai"
-$env:MEMORA_SYNTHESIS_MODEL = "gpt-5.6-luna"
-```
+During retrieval, the panel calmly changes elapsed-time feedback from **Searching previous conversations...** to **Organizing the strongest matches...** after 7 seconds and **Preparing concise memory cards...** after 16 seconds. These are not server progress events or streaming claims. Client waiting is bounded to 60 seconds and controls recover with actionable guidance.
 
-## Local Setup
+## Judge quickstart
+
+This hackathon MVP is developer-operated: it requires a local FastAPI service, Chrome extension, local environment configuration, and supported embedding/synthesis provider configuration. It is not a consumer installer. Production packaging is roadmap work.
+
+For the fastest prepared demo, follow [docs/judge-quickstart.md](docs/judge-quickstart.md). Judges can inspect the repository and run all deterministic tests without private history or live OpenAI calls.
+
+### Local setup summary
 
 Requirements: Python 3.11+, Node.js 20+, npm, and Chrome.
 
-### Backend
-
-1. Create and activate a virtual environment:
-
-   ```powershell
-   python -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   ```
-
-2. Install dependencies:
-
-   ```powershell
-   python -m pip install -e .
-   ```
-
-3. Configure semantic embeddings in the current shell. The repository does not automatically load `.env`:
-
-   ```powershell
-   $env:OPENAI_API_KEY = "your-api-key"
-   $env:MEMORA_EMBEDDING_PROVIDER = "openai"
-   $env:OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
-   $env:MEMORA_DATABASE_URL = "sqlite:///./memora.sqlite3"
-   $env:MEMORA_USER_ID = "demo-user"
-   $env:MEMORA_LOCAL_TOKEN = [Convert]::ToHexString(
-     [Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
-   ).ToLowerInvariant()
-   ```
-
-   `MEMORA_LOCAL_TOKEN` is a dedicated random credential for the local Memora API. It is not an OpenAI key or ChatGPT credential. Keep this terminal open and copy the generated value into the extension popup; never commit or log it.
-
-4. Start the local API on the standard MVP port:
-
-   ```powershell
-   python -m uvicorn backend.api.app:app --host 127.0.0.1 --port 8765
-   ```
-
-5. In another terminal, verify it:
-
-   ```powershell
-   Invoke-RestMethod http://127.0.0.1:8765/health
-   ```
-
-For offline development, set `MEMORA_EMBEDDING_PROVIDER=local`; no API key is needed. Do not mix indexes created by different embedding providers or models.
-
-### Extension
-
-1. Build and verify the extension:
-
-   ```powershell
-   Set-Location extension
-   npm install
-   npm run test
-   npm run typecheck
-   npm run build
-   ```
-
-2. Open `chrome://extensions`, enable Developer mode, select **Load unpacked**, and choose `extension/dist`.
-3. After every rebuild, click **Reload** for Memora and refresh the ChatGPT tab.
-
-The manifest permits only `http://127.0.0.1/*` and `http://localhost/*`, while runtime settings further restrict the backend to port `8765`. The extension stores the Memora token in `chrome.storage.local` and contains no OpenAI credential.
-
-## Usage
-
-1. Start the backend on `http://127.0.0.1:8765`.
-2. Open the Memora popup, keep the default URL, paste the same `MEMORA_LOCAL_TOKEN`, and save.
-3. Import ChatGPT history from an explicitly selected JSON/ZIP file, or index the safe demo samples:
-
-   ```powershell
-   python -m scripts.demo_rag "Where was I running my model again?" --database .\memora.sqlite3
-   ```
-
-   The command indexes all five synthetic sample conversations and prints rankings and context. Use the same embedding provider as the running backend.
-
-4. Open ChatGPT and type `Where was I running my model again?` without submitting.
-5. Click **Retrieve Memory** and confirm **Drone Detection Project** is the top match.
-6. Click **Use This Context**, review the updated draft, and submit it manually.
-
-To upload a real ChatGPT export, use the extension popup. Supported inputs are `conversations.json`, numbered conversation JSON files, or a ZIP containing them. Never copy a real export into this repository.
-
-## Privacy
-
-- Selected conversation exports are sent to the user's local Memora backend.
-- API keys remain server-side and are never included in extension code.
-- Sensitive endpoints require the dedicated local Memora bearer token; database scope comes from server-side `MEMORA_USER_ID`.
-- Retrieval and context insertion each require an explicit user action.
-- Memora never automatically submits a ChatGPT message.
-- Raw imports, message text, context, embeddings, and secrets are not logged by default.
-- Real exports, local databases, `.env`, and extension build artifacts are ignored by Git.
-
-Memora does not currently implement end-to-end encryption.
-
-## Current MVP Limitations
-
-- A local backend is required.
-- The local bearer token is a single-user demo boundary, not production multi-user authentication.
-- ChatGPT integration relies on non-public DOM selectors that may change.
-- SQLite performs linear vector search and is intended for demo-scale data.
-- Imports are synchronous and can take several minutes with OpenAI embeddings.
-- ChatGPT export schemas may change.
-- Only the ChatGPT adapter is implemented.
-- Structured durable-memory extraction is modeled but not part of the active retrieval pipeline.
-- Supported ChatGPT exports are inspected for historical attachment metadata. Memora preserves trusted filename/type/conversation provenance even when a binary is unavailable, and automatically indexes a PDF only when one opaque exported asset resolves unambiguously and passes a local PDF-signature check. Scanned or image-only PDFs require OCR and are not supported.
-
-## Conversation JSON Format
-
-The direct import endpoint accepts one conversation with a required ID and non-empty messages. Roles are `user`, `assistant`, `system`, or `tool`; timestamps are optional timezone-aware ISO 8601 values.
-
-```json
-{
-  "conversation_id": "conv_001",
-  "title": "Drone Detection Project",
-  "created_at": "2026-07-01T12:00:00Z",
-  "messages": [
-    {"role": "user", "content": "I am building a drone detection system."},
-    {"role": "assistant", "content": "What hardware are you using?"}
-  ]
-}
-```
-
-Sensitive API calls require `Authorization: Bearer <MEMORA_LOCAL_TOKEN>`. The caller cannot select the database user scope. Retrieval queries are limited to 2,000 characters, `top_k` to 1–10, and history imports to 10 selected files. In-process limits allow 60 retrievals per minute and 10 imports per 10 minutes by default. These controls protect the local demo but are not distributed production rate limiting.
-
-The current MVP is designed for local single-user use. Bind it only to `127.0.0.1`; do not expose it directly to a LAN or the public internet.
-
-Retrieval responses include a `memories` array of synthesized, user-facing briefs alongside the legacy `context` and `results` fields. The extension displays up to five memory cards and inserts only the brief selected with that card's **Use This Context** button. It does not expose internal relevance scores or raw retrieved chunks in the panel, and it never submits the ChatGPT draft automatically.
-
-The active product flow is: conversation history plus recovered attachment metadata and resolvable PDFs → provenance-preserving chunks → embeddings → semantic or entity-scoped retrieval → hybrid reranking → MemoryThread grouping → per-thread synthesis → sourced MemoryBrief cards → explicit user-controlled context insertion. Only bounded extracted text chunks, never whole PDF binaries, are sent to the configured embedding provider.
-
-ChatGPT ZIP import understands message `metadata.attachments`, `library_files.json`, the opaque-asset filename map, and manifest locations. Strong identifiers and origin metadata are preferred; ambiguous mappings are never guessed. Direct authenticated `POST /api/v1/import/documents` remains an optional way to import additional PDFs that were not part of history.
-
-For large already-extracted exports, use the local directory CLI instead of uploading the archive through Chrome or HTTP:
-
 ```powershell
-$env:MEMORA_DATABASE_URL = "sqlite:///./memora-real.sqlite3"
-$env:MEMORA_USER_ID = "demo-user"
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+
+$env:OPENAI_API_KEY = "your-api-key"
 $env:MEMORA_EMBEDDING_PROVIDER = "openai"
 $env:OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
-$env:OPENAI_API_KEY = "<set-locally>"
-python -m scripts.import_chatgpt_export "C:\path\to\extracted-chatgpt-export"
+$env:MEMORA_SYNTHESIS_PROVIDER = "openai"
+$env:MEMORA_SYNTHESIS_MODEL = "gpt-5.6-luna"
+$env:MEMORA_DATABASE_URL = "sqlite:///./memora.sqlite3"
+$env:MEMORA_USER_ID = "demo-user"
+$env:MEMORA_LOCAL_TOKEN = [Convert]::ToHexString(
+  [Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
+).ToLowerInvariant()
+
+python -m uvicorn backend.api.app:app --host 127.0.0.1 --port 8765
 ```
 
-The CLI reads numbered shards one at a time and uses the same conversation importer, attachment resolver, PDF extractor, embedding provider, deduplication, and additive SQLite store as the API. It prints aggregate counts only. Use the same user, database, provider, and model that created existing vectors; an incompatible embedding identity is rejected before import.
+In another terminal:
 
-## Tests
+```powershell
+Set-Location extension
+npm install
+npm run test
+npm run typecheck
+npm run build
+```
 
-Normal automated tests use deterministic local embeddings and do not call OpenAI:
+Load `extension/dist` from `chrome://extensions`, copy the same `MEMORA_LOCAL_TOKEN` into the popup, and keep the backend bound to `127.0.0.1:8765`. After every rebuild, reload the extension and refresh ChatGPT. For offline development, use `MEMORA_EMBEDDING_PROVIDER=local`; do not mix indexes created by different embedding providers or models.
+
+## Evaluation and quality evidence
+
+The repository's **semantic retrieval evaluation** contains 15 paraphrased positive queries across five synthetic topics and five synthetic no-match queries:
+
+- Local feature-hash baseline: **46.7% positive Top-1**, **5/5 negative abstention** with its calibrated floor.
+- OpenAI `text-embedding-3-small`: previously **15/15 positive Top-1** and **15/15 positive Top-3**.
+
+This small dataset evaluates semantic retrieval behavior, not the full MemoryThread/MemoryFact/MemoryBrief pipeline, and is not a production benchmark. The repository separately has deterministic reranking tests and end-to-end behavioral tests. No comparative Memora-versus-basic-RAG benchmark for the complete pipeline currently exists.
+
+Current verified quality status:
+
+- Backend behavior and integration tests: **101/101 passed**
+- Extension Vitest/jsdom tests: **72/72 passed**
+- Python compilation: **passed**
+- TypeScript strict typecheck: **passed**
+- Production extension build: **passed**
+
+Automated tests use local/mocked providers and do not call OpenAI:
 
 ```powershell
 python -m unittest discover -s tests -v
@@ -254,24 +178,30 @@ npm run typecheck
 npm run build
 ```
 
-## Tech Stack
+## Security summary
 
-- Python 3.11+, FastAPI, Pydantic, Uvicorn
-- SQLite
-- OpenAI Python SDK (`text-embedding-3-small`)
-- TypeScript, Chrome Manifest V3, esbuild, Vitest
+The controlled MVP uses a localhost-only backend, dedicated bearer authentication, server-derived user scope, bounded imports and queries, conservative attachment resolution, untrusted-evidence prompt boundaries, sanitized errors, safe DOM rendering, explicit context insertion, and authenticated privacy/deletion controls. These are local MVP controls, not production multi-user security. See [security architecture](docs/security-architecture.md), [threat model](docs/threat-model.md), and [final security audit](docs/final-security-audit.md).
 
-## Built With Codex
+## Current limitations
 
-Codex was the primary engineering agent used to scaffold, implement, test, debug, and iterate on Memora during the OpenAI hackathon. Product decisions and demo validation remained under human direction.
+- Developer-operated local MVP; no packaged consumer installation or production multi-user identity.
+- SQLite performs a linear vector scan intended for demo-scale data.
+- The database has no encrypted-at-rest guarantee and end-to-end encryption is not implemented.
+- Query-time MemoryFact extraction and per-thread synthesis can add provider latency.
+- Prompt-injection risk is reduced with untrusted-evidence boundaries and explicit insertion, but cannot be eliminated.
+- ChatGPT integration relies on non-public DOM selectors that may require maintenance.
+- Not every historical attachment can be safely recovered; ambiguous assets remain metadata-only.
+- Scanned PDFs require OCR, which is not implemented.
+- Import/indexing is synchronous, and only the ChatGPT adapter is implemented.
 
-## Demo Resources
+## Additional resources
 
-- [2–3 minute demo script](docs/demo-script.md)
-- [Fresh-start checklist](docs/fresh-start-checklist.md)
 - [Architecture](docs/architecture.md)
-## Privacy and memory controls
+- [Technical overview](docs/technical-overview.md)
+- [Submission description](docs/submission-description.md)
+- [Demo video script](docs/demo-video-script.md)
+- [Fresh-start checklist](docs/fresh-start-checklist.md)
 
-The extension popup reports authenticated aggregate counts from the configured local Memora database and provides a two-step **Clear Memora data** action. Deletion removes the active user's imported conversations, messages, indexed conversation chunks and embeddings, attachments, documents, document chunks, and their embeddings. It does not delete `.env`, credentials, source files, manually created database backups, filesystem snapshots, or context text the user already inserted into ChatGPT.
+## Built with Codex
 
-The database is local, but configured embedding, MemoryFact, or synthesis providers may process bounded memory content. Memora does not claim end-to-end encryption, zero-knowledge storage, forensic secure erasure, or deletion of external backups. Both memory statistics and deletion require `MEMORA_LOCAL_TOKEN`; user identity comes only from server-side `MEMORA_USER_ID`.
+Codex was the primary engineering agent used to scaffold, implement, test, debug, and iterate on Memora during the OpenAI hackathon. Product decisions, tradeoffs, and demo validation remained under human direction.

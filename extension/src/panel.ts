@@ -9,6 +9,12 @@ const BUBBLE_HEIGHT = 42;
 const SAFE_MARGIN = 16;
 const COMPOSER_CLEARANCE = 112;
 const POSITION_STORAGE_KEY = "memoraBubblePosition";
+export const LOADING_STAGE_DELAYS_MS = [7_000, 16_000] as const;
+export const LOADING_STAGE_MESSAGES = [
+  "Searching previous conversations...",
+  "Organizing the strongest matches...",
+  "Preparing concise memory cards...",
+] as const;
 let cleanupActivePanel: (() => void) | null = null;
 
 export class MemoraPanel {
@@ -28,6 +34,8 @@ export class MemoraPanel {
   private interacted = false;
   private dragStart: { pointerX: number; pointerY: number; x: number; y: number } | null = null;
   private dragged = false;
+  private loadingTimers: Array<ReturnType<typeof globalThis.setTimeout>> = [];
+  private loadingGeneration = 0;
 
   constructor(onRetrieve: () => void, private readonly onUseMemory: (memory: MemoryBrief) => void) {
     cleanupActivePanel?.();
@@ -73,6 +81,7 @@ export class MemoraPanel {
     window.addEventListener("pointerup", this.endDrag);
     window.addEventListener("resize", this.handleResize);
     cleanupActivePanel = () => {
+      this.clearLoadingTimers();
       window.removeEventListener("pointermove", this.moveDrag);
       window.removeEventListener("pointerup", this.endDrag);
       window.removeEventListener("resize", this.handleResize);
@@ -88,10 +97,20 @@ export class MemoraPanel {
     this.renderState("idle", message);
   }
   showLoading(): void {
+    this.clearLoadingTimers();
     this.currentMemories = [];
     delete this.bubble.dataset.hasMemories;
     this.action.disabled = true;
-    this.renderState("loading", "Searching your memory...");
+    this.renderState("loading", LOADING_STAGE_MESSAGES[0]);
+    const generation = this.loadingGeneration;
+    // These deterministic elapsed-time messages reassure the user; they are
+    // deliberately not claims about actual server-side stage completion.
+    this.loadingTimers = LOADING_STAGE_DELAYS_MS.map((delay, index) =>
+      globalThis.setTimeout(() => {
+        if (generation !== this.loadingGeneration || this.status.dataset.state !== "loading") return;
+        this.status.textContent = LOADING_STAGE_MESSAGES[index + 1];
+      }, delay)
+    );
   }
   showError(message: string): void {
     this.currentMemories = [];
@@ -218,6 +237,7 @@ export class MemoraPanel {
   }
 
   private renderState(state: PanelState, message: string): void {
+    if (state !== "loading") this.clearLoadingTimers();
     this.content.replaceChildren();
     this.memoryButtons.clear();
     this.sortControl.hidden = true;
@@ -226,6 +246,7 @@ export class MemoraPanel {
   }
 
   private setExpanded(expanded: boolean): void {
+    if (!expanded) this.clearLoadingTimers();
     this.expanded = expanded;
     this.panel.hidden = !expanded;
     this.bubble.setAttribute("aria-expanded", String(expanded));
@@ -292,6 +313,12 @@ export class MemoraPanel {
     if (!stored || this.interacted) return;
     this.position = clampPosition(stored);
     this.applyPosition();
+  }
+
+  private clearLoadingTimers(): void {
+    this.loadingGeneration += 1;
+    this.loadingTimers.forEach((timer) => globalThis.clearTimeout(timer));
+    this.loadingTimers = [];
   }
 }
 

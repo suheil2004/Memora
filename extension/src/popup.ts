@@ -3,6 +3,7 @@ import { renderImportError, renderImportSummary } from "./import-ui";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type MemoraSettings } from "./settings";
 import { MAX_IMPORT_FILES } from "./security";
 import { initializePrivacyControls } from "./privacy-controls";
+import { checkAuthenticatedReadiness, type ReadinessState } from "./readiness";
 
 const form = required<HTMLFormElement>("#settings-form");
 const backendUrl = required<HTMLInputElement>("#backend-url");
@@ -129,20 +130,25 @@ async function checkConnection(settings: MemoraSettings, saved = false): Promise
   setConnection("checking");
   status.className = "helper";
   status.textContent = saved ? "Settings saved. Checking connection..." : "";
-  try {
-    await new MemoraApiClient(settings.backendUrl, settings.localToken).health();
-    setConnection("connected");
-    status.textContent = saved ? "Settings saved. Memora is ready." : "";
-  } catch {
-    setConnection("offline");
-    status.className = "helper error";
-    status.textContent = "Memora backend is offline. Start the local service to use retrieval and imports.";
-  }
+  const readiness = await checkAuthenticatedReadiness(
+    new MemoraApiClient(settings.backendUrl, settings.localToken),
+  );
+  setConnection(readiness.state);
+  status.className = readiness.state === "ready" || readiness.state === "empty"
+    ? "helper success"
+    : "helper error";
+  status.textContent = saved && readiness.state === "ready"
+    ? `Settings saved. ${readiness.message}`
+    : readiness.message;
 }
 
-function setConnection(state: "checking" | "connected" | "offline"): void {
+function setConnection(state: ReadinessState | "checking" | "connected"): void {
   connectionState.className = `status-pill ${state}`;
-  connectionLabel.textContent = state === "connected" ? "Connected" : state === "offline" ? "Offline" : "Checking...";
+  connectionLabel.textContent = state === "ready" || state === "connected" ? "Ready"
+    : state === "empty" ? "No memory imported yet"
+      : state === "authentication" ? "Authentication failed"
+        : state === "unavailable" ? "Configuration unavailable"
+          : state === "offline" ? "Memora is offline" : "Checking...";
 }
 
 function friendlyImportError(error: unknown): string {

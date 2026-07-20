@@ -6,6 +6,7 @@ import { debug } from "./debug";
 import type { MemoryBrief } from "./api/types";
 import type { ContentControlRequest } from "./api/types";
 import { applyContextSnapshot, createMemorySnapshot } from "./context-insertion";
+import { friendlyRetrievalError } from "./retrieval-errors";
 
 const adapter = new ChatGptAdapter();
 let panel: MemoraPanel;
@@ -26,17 +27,6 @@ async function retrieveMemory(): Promise<void> {
     debug("CONTENT", "retrieval error", error instanceof Error ? error.message : "unknown error");
     panel.showError(friendlyRetrievalError(error));
   }
-}
-
-function friendlyRetrievalError(error: unknown): string {
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
-  if (message.includes("background service")) {
-    return "Memora needs to be reloaded. Reload the extension, refresh ChatGPT, and try again.";
-  }
-  if (message.includes("backend") || message.includes("could not reach")) {
-    return "Memora backend is offline. Start the local Memora service and try again.";
-  }
-  return "Memory retrieval failed. Try again.";
 }
 
 function useRetrievedMemory(memory: MemoryBrief): void {

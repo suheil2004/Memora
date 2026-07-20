@@ -1,4 +1,4 @@
-import type { BackgroundRequest, BackgroundResponse, ContextResponse } from "./api/types";
+import type { BackgroundRequest, BackgroundResponse, ContextResponse, ExtensionErrorCode } from "./api/types";
 import { debug } from "./debug";
 
 export interface RuntimeMessenger {
@@ -7,6 +7,13 @@ export interface RuntimeMessenger {
 
 export class ExtensionMessagingError extends Error {
   readonly code = "EXTENSION_MESSAGING_ERROR" as const;
+}
+
+export class MemoraRequestError extends Error {
+  constructor(readonly code: ExtensionErrorCode, message: string) {
+    super(message);
+    this.name = "MemoraRequestError";
+  }
 }
 
 export async function requestMemoraContext(
@@ -28,6 +35,6 @@ export async function requestMemoraContext(
   if (!response || typeof response.ok !== "boolean") {
     throw new ExtensionMessagingError("Memora received an invalid response from its background service.");
   }
-  if (!response.ok) throw new Error(response.error.message);
+  if (!response.ok) throw new MemoraRequestError(response.error.code, response.error.message);
   return response.data;
 }

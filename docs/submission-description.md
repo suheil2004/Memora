@@ -1,88 +1,57 @@
-# Memora
+# Memora — Submission Description
 
-## One-Sentence Pitch
+## One-sentence pitch
 
-Memora is a transparent, user-controlled memory layer that retrieves, organizes, synthesizes, and sources relevant context from previous AI conversations.
+Memora gives AI conversations continuity by finding the important current context in a user's history, preserving where it came from, and letting the user choose what to bring into a new chat.
 
-## 30-Word Description
+## Problem
 
-Memora gives ChatGPT continuity across conversations by semantically retrieving relevant history and letting users explicitly insert compact, attributed context into a new draft before manually submitting it to the assistant.
+A fresh AI conversation often lacks the project decisions, preferences, constraints, corrections, and documents discussed in older chats. Nearest-text retrieval alone can surface outdated versions or blend distinct subjects, while silently injecting history removes user awareness and control.
 
-## 50-Word Description
+## What Memora does
 
-Memora is a user-controlled memory layer for ChatGPT. It imports previous conversations, retrieves and organizes relevant history into sourced synthesized memories, and lets the user explicitly insert one selected brief. Its local backend keeps API credentials out of the browser.
+Memora explicitly imports supported ChatGPT history and recoverable attachment assets into a local FastAPI/SQLite service. It retrieves relevant conversation and PDF evidence, organizes it into distinct memories, identifies important facts, reasons about current versus historical state, and presents concise sourced MemoryBriefs inside ChatGPT.
 
-## 150-Word Description
+The user decides when retrieval happens, which brief to insert with **Use This Context**, and when to submit. Memora does not automatically access account history, inject all retrieved context, or press Send.
 
-Context is often fragmented across AI conversations: a technical setup described last week, a preference recorded in another thread, or a decision buried in a long history. Memora makes that context available without becoming another chatbot. Users explicitly import ChatGPT exports into a local FastAPI backend, where conversations are normalized, chunked with provenance, embedded, and stored in SQLite. Retrieval uses semantic relevance or a narrow exact-entity course scope, then hybrid reranking and conservative MemoryThread grouping. Each selected thread is synthesized independently into a sourced MemoryBrief. The extension presents up to five separate cards; nothing is inserted until the user chooses one and clicks **Use This Context**, and Memora never automatically submits. OpenAI powers semantic embeddings and optional synthesis in the demo, while deterministic local providers keep tests offline.
+## Why it is different
 
-## The Problem
+Basic semantic RAG typically follows `query → nearest chunks → prompt`. Memora follows:
 
-AI assistants are powerful, but relevant context can become fragmented or unavailable across separate conversations and tools. Users repeatedly explain projects, preferences, technical setups, earlier decisions, and personal context. Long threads make details hard to find, while fresh sessions often lack the history needed to interpret a short question.
+`query → eligible evidence → hybrid reranking/entity scope → MemoryThreads → query-time MemoryFacts → salience/specificity/temporal ranking → per-thread MemoryBriefs → trusted sources → user-selected insertion`
 
-## The Solution
+This separates different subjects and versions before synthesis, favors explicit current-state and correction evidence when the question calls for it, preserves old versions for historical questions, and attaches provenance in backend code rather than trusting generated citations.
 
-Memora indexes conversations that the user explicitly imports, generates semantic embeddings, and retrieves only the historical chunks relevant to the current question. It surfaces attributed memory inside the existing ChatGPT experience. The user decides when retrieval happens, whether the context should enter the draft, and when to submit.
+## How it works
 
-## How It Works
+- ChatGPT JSON/ZIP conversations are normalized and split into role-aware, provenance-preserving chunks.
+- Safely resolved historical text PDFs can be recovered automatically and indexed with page sources; ambiguous assets remain metadata-only.
+- OpenAI `text-embedding-3-small` supplies semantic candidates for the demo, with a deterministic local implementation for offline tests.
+- Hybrid reranking and exact entity/course boundaries improve precision before conservative MemoryThread grouping.
+- Active query-time MemoryFact extraction removes filler and ranks facts by query utility, salience, specificity, corrections, trusted timestamps, and current/historical intent. These facts are ephemeral; durable persisted MemoryFacts are not implemented.
+- Each selected thread becomes one bounded MemoryBrief. Trusted conversations, documents, pages, and timestamps are attached by Memora after model output.
+- A Manifest V3 extension displays up to five cards with **Best match / Most recent** sorting and explicit context insertion.
 
-```text
-ChatGPT History
-  -> Import
-  -> Chunk
-  -> Embed
-  -> Store
-  -> Semantic or Entity-Scoped Retrieval
-  -> Hybrid Reranking and MemoryThreads
-  -> Sourced MemoryBrief Cards
-  -> Use This Context
-```
+## Privacy and user control
 
-## Key Features
+Imported history, embeddings, recovered document text, and provenance are stored in the configured local database. When OpenAI providers are enabled, bounded text may be sent for embeddings, MemoryFact extraction, and MemoryBrief synthesis; API credentials remain in the backend process.
 
-- Semantic RAG over previous conversations
-- Explicit ChatGPT JSON/ZIP history import and duplicate protection
-- Manifest V3 Chrome extension with a ChatGPT adapter
-- Explicit **Retrieve Memory** and **Use This Context** actions
-- User-scoped search with conversation, chunk, and message provenance
-- Compact, size-bounded context construction
-- Local FastAPI and SQLite backend; no API key in the extension
+Sensitive API operations require a dedicated localhost bearer token and server-derived user scope. Historical content is treated as untrusted evidence, rendered safely, and inserted only after an explicit click. The popup exposes authenticated aggregate counts and two-step clearing of active Memora records. Manual backups and context already inserted into ChatGPT are not deleted.
 
-## Why It Matters
+## Technical depth and evidence
 
-Continuity makes an assistant more useful: a short question can refer to the user's real prior project rather than requiring another full explanation. Memora is not another chatbot. It is a memory layer that augments an existing assistant and keeps the user in control of when historical context is used.
+The implemented system includes conservative ChatGPT graph import, duplicate replacement, automatic attachment/PDF recovery, compatible-vector enforcement, semantic abstention, entity/course scoping, hybrid reranking, thread separation, fact extraction, correction handling, temporal ranking, resilient structured synthesis, trusted provenance, runtime-message validation, explicit insertion, and privacy controls.
 
-## OpenAI Technology
+Current verification is **101/101 backend tests**, **72/72 extension tests**, Python compilation, strict TypeScript typecheck, and production extension build. Automated tests use deterministic local or mocked providers and do not call OpenAI.
 
-OpenAI `text-embedding-3-small` generates semantic vectors for conversation chunks and user queries. Cosine similarity over those vectors powers retrieval of historically relevant discussions even when the new wording differs from the original. The embedding boundary is provider-independent, with a deterministic local implementation for development and testing. Codex was the primary engineering agent used throughout the project's iterative development.
+The repository's small semantic retrieval fixture previously measured OpenAI embeddings at 15/15 positive Top-1 and Top-3; the local feature-hash baseline measured 46.7% positive Top-1 and 5/5 negative abstention. These are semantic retrieval results, not a comparative benchmark for the full memory-intelligence pipeline. Reranking and end-to-end behavior are validated separately by deterministic tests.
 
-## Retrieval Evaluation
+## Demo
 
-| Provider | Top-1 | Top-3 |
-| --- | ---: | ---: |
-| Local feature-hash baseline | 46.7% | — |
-| OpenAI `text-embedding-3-small` | 100% (15/15) | 100% (15/15) |
+In a fresh ChatGPT conversation, ask about a project with an old and current design. Click **Retrieve Memory** to show the current-state brief first, a historical memory separately, trusted chat/PDF page sources, and timestamps. Select **Use This Context** to insert one bounded brief while preserving the original question. Review and submit manually.
 
-Measured on a small 15-query MVP evaluation set designed to test paraphrased retrieval across five conversation topics. These results validate the demo dataset and are not a production benchmark or a claim of universal accuracy.
+The hackathon MVP is developer-operated: it requires a local FastAPI service, unpacked Chrome extension, environment configuration, and supported provider setup. It is not yet consumer-packaged, production multi-user, encrypted at rest, or designed for large vector indexes. ChatGPT DOM changes may require adapter maintenance, query-time fact/synthesis calls add latency, prompt-injection risk cannot be eliminated, and not every historical attachment is recoverable.
 
-## Built With Codex
+## Built with Codex
 
-Codex was used iteratively for repository scaffolding, the first end-to-end vertical slice, RAG and API integration, automated testing, TypeScript fixes, browser-extension debugging, documentation, and final hardening. Human direction defined the product scope, evaluated tradeoffs, supplied manual browser validation, and guided each iteration.
-
-## Current MVP Limitations
-
-- The FastAPI backend must run locally.
-- The local bearer-token boundary is not production multi-user authentication.
-- ChatGPT integration depends on non-public DOM selectors that may change.
-- SQLite vector retrieval is a linear scan intended for demo-scale data.
-- Large imports run synchronously.
-- ChatGPT export formats may evolve.
-- ChatGPT is the only implemented AI chat adapter.
-- Structured durable-memory extraction is designed as a separate boundary but is not active.
-- End-to-end encryption is not implemented.
-- Memora does not automatically access ChatGPT history; users explicitly select supported export files.
-- Supported ChatGPT exports automatically recover historical attachment context. Safely resolved text PDFs are indexed with page provenance; unresolved attachments retain filename/type/conversation provenance without claims about contents. Manual PDF import remains optional for additional documents. Scanned PDFs and OCR are not supported.
-
-## Future Direction
-
-Possible next steps include additional AI-platform adapters, production authentication, encrypted storage, a scalable vector index, structured durable memory alongside raw-conversation RAG, and optional live conversation capture with explicit user permission. None of these are part of the current MVP.
+Codex supported iterative scaffolding, implementation, testing, browser debugging, security hardening, and documentation. Human direction defined product scope, evaluated tradeoffs, and validated the demo.

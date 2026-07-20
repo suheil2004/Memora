@@ -48,6 +48,11 @@ User previously discussed:
     sources: [{ type: "conversation", conversation_id: "conv_drone_001", conversation_title: "Drone Detection Project" }], used_fallback: false }],
 };
 
+const populatedStatistics = {
+  conversations: 1, conversation_chunks: 2, attachments: 0,
+  documents: 0, document_chunks: 0,
+};
+
 function dependencies(fetchImpl: typeof fetch): BackgroundDependencies {
   return {
     loadSettings: async () => ({
@@ -62,9 +67,9 @@ function dependencies(fetchImpl: typeof fetch): BackgroundDependencies {
 
 describe("content-to-background retrieval messaging", () => {
   it("passes a typed request through the background handler to the API client", async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify(apiResponse), { status: 200 }),
-    );
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(populatedStatistics), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(apiResponse), { status: 200 }));
     const runtime: RuntimeMessenger = {
       sendMessage: (message: BackgroundRequest) => handleBackgroundRequest(message, dependencies(fetchMock)),
     };
@@ -72,8 +77,9 @@ describe("content-to-background retrieval messaging", () => {
     const response = await requestMemoraContext("Where is inference running?", runtime);
 
     expect(response).toEqual(apiResponse);
-    expect(fetchMock).toHaveBeenCalledOnce();
-    const init = fetchMock.mock.calls[0]?.[1];
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/api/v1/memory/stats");
+    const init = fetchMock.mock.calls[1]?.[1];
     expect(JSON.parse(String(init?.body))).toEqual({
       query: "Where is inference running?",
       top_k: 5,
@@ -115,9 +121,9 @@ describe("content-to-background retrieval messaging", () => {
   });
 
   it("keeps the callback response channel open until the async handler completes", async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify(apiResponse), { status: 200 }),
-    );
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(populatedStatistics), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(apiResponse), { status: 200 }));
     let listener: Parameters<BackgroundRuntime["onMessage"]["addListener"]>[0] | undefined;
     const runtime: BackgroundRuntime = {
       onMessage: {
@@ -137,14 +143,14 @@ describe("content-to-background retrieval messaging", () => {
     });
 
     await expect(response).resolves.toMatchObject({ ok: true, data: apiResponse });
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("carries the exact successful API response through messaging and renders it", async () => {
     document.body.innerHTML = "";
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify(exactBackendResponse), { status: 200 }),
-    );
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(populatedStatistics), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(exactBackendResponse), { status: 200 }));
     const runtime: RuntimeMessenger = {
       sendMessage: (message: BackgroundRequest) =>
         handleBackgroundRequest(message, dependencies(fetchMock)),
@@ -163,5 +169,21 @@ describe("content-to-background retrieval messaging", () => {
     expect(root.textContent).not.toContain("No relevant memory found");
     expect(root.textContent).not.toContain("Memory retrieval failed");
     expect(root.textContent).toContain("Use This Context");
+  });
+
+  it("returns no-imported-memory without calling the provider-backed retrieval endpoint", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({
+        conversations: 0, conversation_chunks: 0, attachments: 0,
+        documents: 0, document_chunks: 0,
+      }), { status: 200 }),
+    );
+    const response = await handleBackgroundRequest(
+      { type: "MEMORA_RETRIEVE_CONTEXT", query: "Where is inference running?" },
+      dependencies(fetchMock),
+    );
+    expect(response).toMatchObject({ ok: false, error: { code: "NO_IMPORTED_MEMORY" } });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/api/v1/memory/stats");
   });
 });

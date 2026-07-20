@@ -2,22 +2,29 @@
 
 Memora is a local modular monolith plus a thin Manifest V3 extension. This document describes the code that exists today; it is not a future architecture plan.
 
-## Runtime components
+## End-to-end memory flow
 
-```text
-ChatGPT draft
-  -> content script / ChatGptAdapter
-  -> chrome.runtime message
-  -> background service worker
-  -> Authorization: Bearer <Memora local token>
-  -> POST http://127.0.0.1:8765/api/v1/context/retrieve
-  -> FastAPI MemoraService
-  -> query embedding + user-scoped SQLite cosine search
-  -> ranked/deduplicated chunks + CompactContextBuilder
-  -> background response
-  -> Memora panel
-  -> explicit Use This Context action
-  -> updated draft (never auto-submitted)
+```mermaid
+flowchart TD
+    A[User-selected ChatGPT history + attachment assets] --> B[Normalize messages + role-aware chunks]
+    B --> C[Embeddings + user-scoped SQLite]
+    C --> D[Semantic candidates]
+    D --> E[Hybrid reranking + entity/course scope]
+    E --> F[MemoryThread grouping]
+    F --> G[Ephemeral query-time MemoryFacts]
+    G --> H[Salience + specificity + temporal/current-state utility]
+    H --> I[Per-thread MemoryBrief synthesis]
+    I --> J[Backend-attached sources + trusted timestamps]
+    J --> K[Service worker response]
+    K --> L[Extension panel]
+    L --> M[Explicit Use This Context]
+    M --> N[Composer update]
+    N --> O[Manual user submission]
+
+    U[Conversation and PDF text is untrusted evidence] -. bounded evidence .-> G
+    U -. bounded evidence .-> I
+    P[Provider output cannot define provenance] -. trusted backend projection .-> J
+    L -. no automatic insertion or submit .-> O
 ```
 
 The content script never calls the backend directly. Cross-origin HTTP runs in the service worker using manifest host permissions. Sensitive endpoints authenticate a dedicated local bearer token and derive database scope from server-side `MEMORA_USER_ID`. OpenAI keys stay in the backend process.
@@ -45,7 +52,7 @@ The local `scripts.import_chatgpt_export` entry point adapts an already-extracte
 
 The direct `POST /api/v1/conversations/import` endpoint accepts Memora's documented single-conversation JSON shape.
 
-## Raw conversation RAG
+## Retrieval and memory intelligence
 
 `ConversationChunk` is the active retrieval unit. It retains user ID, conversation ID/title, chunk ID/ordinal, text, and source message IDs. Chunk text preserves message roles. Embeddings are created by either:
 
@@ -62,7 +69,7 @@ Every query containing exactly one strict course identifier establishes a user-s
 
 Multi-course conversations are handled conservatively: only chunks explicitly containing the requested code, and no conflicting code, are eligible. Unlabelled chunks from an ambiguous conversation are excluded. This favors precision over recall until document/chunk-level course attribution is modeled explicitly.
 
-Each selected thread first passes through a bounded `MemoryFactExtractor`. It discards filler and extracts concise user-centric facts typed as facts, decisions, goals, preferences, constraints, results, status, problems, solutions, corrections, or open loops. The model may propose only the type, text, salience, and specificity; Memora attaches trusted thread provenance afterward. Fact utility uses 45% query overlap, 23% historical salience, 17% specificity, 5% title/entity overlap, 4% gentle relative recency, and 6% explicit current-state or historical-intent alignment. Near-duplicates collapse, and explicit corrections replace sufficiently related older claims while retaining merged provenance. Conflicts without explicit correction remain visible.
+Each selected thread first passes through a bounded `MemoryFactExtractor`. This query-time stage is active today, but its MemoryFacts are ephemeral for the request and are not persisted as durable database records. It discards filler and extracts concise user-centric facts typed as facts, decisions, goals, preferences, constraints, results, status, problems, solutions, corrections, or open loops. The model may propose only the type, text, salience, and specificity; Memora attaches trusted thread provenance afterward. Fact utility uses 45% query overlap, 23% historical salience, 17% specificity, 5% title/entity overlap, 4% gentle relative recency, and 6% explicit current-state or historical-intent alignment. Near-duplicates collapse, and explicit corrections replace sufficiently related older claims while retaining merged provenance. Conflicts without explicit correction remain visible.
 
 After extraction, the already-eligible threads receive a deterministic temporal/current-state score: 70% existing hybrid relevance, 12% strongest fact quality, 6% gentle recency, and 12% explicit current-state evidence. Explicit old/original markers receive a small penalty for ordinary broad queries. For explicitly historical queries, that preference is inverted: 70% hybrid relevance, 12% fact quality, 15% historical-marker alignment, and only 3% inverse recency. Current, latest, updated, revised, switched, changed, final-design, and correction language therefore matters more than timestamp alone. Recency uses a two-year gentle curve with a 0.25 floor and can never make an ineligible memory eligible. Stable old goals and constraints remain viable when semantically relevant.
 
@@ -83,7 +90,9 @@ Each fact-enriched thread is independently passed to the configured `MemorySynth
 - `messaging.ts` defines the content-to-background request path.
 - `background-listener.ts` keeps the asynchronous response channel open.
 - `background-handler.ts` loads settings, checks host permission, and invokes the API client.
-- `popup.ts` owns settings, health status, and explicit history import.
+- `popup.ts` owns settings, authenticated readiness, explicit history import, and privacy controls.
+
+Readiness calls authenticated memory statistics rather than relying on public health. It distinguishes ready, empty-memory, authentication, offline, and deterministic configuration failures without invoking provider-backed retrieval. Retrieval loading copy changes at fixed elapsed intervals for user feedback; it is not a stream of backend progress events.
 
 Retrieval does not capture the current conversation, run automatically, inject automatically, or submit messages. If the draft changes after retrieval, insertion is refused to protect the user's edits. A user explicitly selects one synthesized brief, which is labeled untrusted reference data and enclosed in escaped `<memory_context>` delimiters.
 
@@ -91,7 +100,7 @@ Retrieval does not capture the current conversation, run automatically, inject a
 
 Every persisted conversation, chunk, fingerprint, and retrieval query is scoped by the authenticated server-configured `MEMORA_USER_ID`; clients cannot choose it. The dedicated local token is a single-user hackathon control, not production authentication. Conversation content and embeddings are sensitive local data; the SQLite file is ignored by Git and should not be shared.
 
-Durable structured-fact extraction remains a separate future boundary. The active MVP retrieves raw chunks as internal evidence, groups them into MemoryThreads, and exposes synthesized MemoryBriefs rather than raw chat dumps as the primary experience.
+Query-time MemoryFact extraction is active and ephemeral. Durable persisted MemoryFacts remain a separate future storage and lifecycle boundary. The active MVP retrieves raw chunks as internal evidence, groups them into MemoryThreads, extracts and ranks bounded facts for the current query, and exposes synthesized MemoryBriefs rather than raw chat dumps as the primary experience.
 
 ## Operational limits
 
