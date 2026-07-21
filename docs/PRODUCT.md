@@ -1,155 +1,159 @@
-# Memora Product Overview
+# Memora
 
-## What Memora is
+I built Memora around a problem I kept running into the more I used ChatGPT: the longer you use AI, the more useful context you build up, but the harder it becomes to actually use that context later.
 
-Memora is a user-controlled memory and retrieval layer for ChatGPT. It does not replace ChatGPT and is not a standalone chatbot. It imports history the user explicitly supplies, retrieves evidence relevant to a new draft, organizes that evidence into concise MemoryBriefs, and lets the user choose whether to insert one into the draft.
+You can spend months working on the same project across completely different conversations. One chat has the original idea. Another has a problem you ran into. A third has a decision you made, and then somewhere later you changed that decision completely. You might also have a PDF or attachment that mattered at the time but is now buried in your history.
 
-The current implementation is a local-first hackathon MVP: a Manifest V3 Chrome extension, a loopback FastAPI service, and a user-scoped SQLite database.
+Then you start a new conversation and basically none of that context is there.
 
-## The problem
+That is the problem Memora is built for.
 
-Useful context becomes scattered across long-running conversations and separate chat sessions. A decision may be buried in an old project chat, a later conversation may correct it, and a supporting document may exist only as an attachment. A new conversation lacks that continuity and may confuse the original plan with the current one.
+**The problem**
 
-Dumping an entire history into a prompt is expensive, noisy, and difficult to audit. Nearest-vector retrieval alone can also blend different people, tasks, courses, or versions.
+A normal conversation history is useful, but it is still just history. You have to remember where something was discussed, search for the right chat, read through old messages, and figure out which information is still current.
 
-## The solution
+And even search by itself is not always enough.
 
-Memora retrieves a bounded evidence set and adds several organization stages before presenting anything to the user. It keeps distinct topics and versions separate, prioritizes concrete and temporally appropriate facts, creates one brief per selected thread, and shows where each brief came from.
+Say you have been working on a drone detection project for six months. In an early conversation, you decided to use one design. A month later, you found a problem with it and switched to something else. If you ask about the project now, the most similar old message might still be the outdated one.
 
-Nothing is inserted automatically. The user reviews the result, selects **Use This Context**, reviews the changed draft, and submits manually.
+The point is not just to find text that looks similar.
 
-## Core workflow
+The point is to find what from your history actually matters for what you are asking now.
 
-1. The user imports a supported ChatGPT JSON/ZIP export or additional text PDFs through the extension popup.
-2. Memora normalizes conversations, preserves message roles, creates overlapping chunks, embeds them, and stores them locally.
-3. In ChatGPT, the user writes a draft question and explicitly selects **Retrieve memory**.
-4. The extension service worker sends the query to the authenticated local API.
-5. Memora retrieves candidates, reranks them, forms MemoryThreads, extracts query-time MemoryFacts, applies temporal/current-state reasoning, and creates MemoryBriefs.
-6. The panel displays up to five cards with trusted conversation, attachment, or PDF/page provenance.
-7. The user may change sorting, search the latest composer text, clear transient results, or select **Use This Context**.
-8. Memora inserts only the selected brief into the unchanged draft. The user remains responsible for reviewing and manually submitting it.
+**A memory layer you control**
 
-Memora does not automatically capture the current conversation, automatically retrieve, automatically insert, or press Send.
+Memora works alongside ChatGPT rather than replacing it.
 
-## Memory intelligence pipeline
+You write your prompt like normal. Before sending it, you can ask Memora to retrieve relevant memory from the history you chose to import.
 
-### Durable stored data
+Memora searches through that history, finds the strongest related information, organizes it, and gives you clear MemoryBriefs instead of dumping raw old messages into the conversation.
 
-The active SQLite store persists user-scoped conversations, normalized messages, conversation chunks, embeddings and provider identity, import fingerprints, attachment metadata, documents, document chunks, timestamps, and provenance. It does not persist MemoryFacts as durable records.
+You can see what each memory is about and where it came from.
 
-### Retrieval
+Then you decide what happens next.
 
-The configured embedding provider embeds imports and queries. SQLite filters by the authenticated server-configured user before cosine-similarity ranking. Provider, model, and vector dimensions must remain compatible; Memora rejects incompatible vector spaces rather than comparing them.
+Nothing is silently inserted. Nothing is automatically sent. When you choose **Use This Context**, Memora adds the selected context to your draft so you can review it yourself before manually sending the message.
 
-A calibrated minimum similarity threshold controls semantic eligibility. Exact single-course queries have a separate conservative course-scoping path derived from trusted stored content.
+That control is one of the main ideas behind the product. I did not want Memora to act like an invisible memory system that decides on its own what ChatGPT should remember.
 
-### Hybrid ranking
+The user should be able to see the memory first.
 
-Only eligible candidates enter deterministic reranking. The reranker combines semantic similarity with significant query-term and title overlap, plus entity/course-aware adjustments. Diversity logic prevents a single conversation from flooding the result set.
+**From conversation history to useful memory**
 
-### MemoryThreads
+Finding a relevant old message is only the first step.
 
-MemoryThreads conservatively group evidence belonging to the same subject and goal. Explicitly different people, courses, tasks, projects, and version markers remain separate. At most five final threads proceed to synthesis.
+Memora tries to understand how the pieces of your history relate to each other before showing anything back to you.
 
-MemoryThreads are query-time organization objects, not a separate durable storage table.
+If you are asking about one project, it should not mix in a completely different project just because both conversations happen to use similar technical words.
 
-### MemoryFacts
+That is where **MemoryThreads** come in.
 
-Each selected thread produces bounded, user-centric MemoryFacts such as decisions, constraints, preferences, results, status, corrections, and open loops. Facts are ranked by query relevance, salience, specificity, entity overlap, gentle recency, and temporal intent.
+MemoryThreads keep related pieces of history together around the same subject, project, task, or goal. The idea is simple: one memory card should represent one coherent thing instead of blending unrelated parts of your history together.
 
-Near-duplicates collapse. A sufficiently related explicit correction may supersede an older claim while retaining combined provenance; unresolved conflicts remain visible. MemoryFacts are ephemeral for the request and are not persisted.
+Once Memora has found the right thread, it looks for the information inside it that actually matters for the current question.
 
-### Temporal and current-state reasoning
+These are **MemoryFacts**.
 
-Memora uses trusted source timestamps and explicit language such as current, updated, switched, original, or previous. For ordinary queries, current-state evidence receives a preference and older-version markers a small penalty. For explicitly historical questions, historical markers receive the stronger preference. Recency is a supporting signal, not an eligibility rule.
+A MemoryFact might be a decision you made, a goal, a result, a constraint, a preference, a problem, a solution, a correction, or the current status of something you were working on.
 
-Older databases created before source timestamps were indexed may require re-import or the user-scoped timestamp backfill utility before temporal evaluation.
+They are created for the retrieval you are doing right now. Memora does not permanently store them as a separate hidden memory database.
 
-### MemoryBriefs and provenance
+This matters because the same conversation can be useful in different ways depending on what you ask.
 
-Each final thread is synthesized independently into a MemoryBrief with a title, summary, and key details. Enhanced mode uses structured OpenAI synthesis with deterministic fallback; Local mode uses deterministic synthesis.
+If you ask, "What am I currently using for this project?" the latest correction might matter most.
 
-Conversation IDs/titles, message/chunk provenance, attachment metadata, document/page sources, subject, and timestamps are attached by trusted backend code rather than accepted from model output.
+If you ask, "What was my original design?" then the older information is exactly what you want.
 
-## Retrieval experience
+Memora uses temporal reasoning to help with that distinction.
 
-- **Best match** preserves backend relevance order.
-- **Most recent** reorders the already-returned cards by trusted latest timestamp without another API request.
-- **Showing memory for** records the query that produced the visible cards; editing the composer does not silently change it.
-- **Search current prompt** reads the composer at click time and replaces the previous cards through the existing retrieval path.
-- **Clear results** removes only transient panel state. It does not call the backend, change the composer, or delete stored memory.
-- Staged messages—**Searching previous conversations...**, **Organizing the strongest matches...**, and **Preparing concise memory cards...**—are elapsed-time UI feedback, not streamed backend progress.
-- A request-generation guard prevents an older delayed response from replacing newer results.
+Newer is not automatically always better. Older is not automatically wrong either. The goal is to understand whether you are asking about the current state, the latest decision, or something historical.
 
-## Documents and attachments
+After that, Memora turns the strongest information into **MemoryBriefs**.
 
-Supported ChatGPT exports can contain message attachment metadata, library records, filename mappings, manifest entries, and opaque assets. Memora correlates these conservatively: strong identifiers take priority, ambiguous mappings are refused, and archive entries are inspected without extracting the ZIP to disk.
+These are the cards the user actually sees.
 
-Safely resolved text PDFs are signature-checked, bounded, extracted locally with `pypdf`, chunked, embedded, and cited with filename and page range. Attachments that cannot be resolved safely remain metadata-only records rather than guessed document content.
+Instead of showing the internal retrieval process, each MemoryBrief gives you a clear summary of one relevant thread and keeps the source information attached so you can understand where it came from.
 
-The popup also supports explicit import of additional text PDFs. Scanned/image-only PDFs, OCR, encrypted PDFs, remote URLs, and arbitrary embedded document formats are not supported.
+You should not have to trust a summary with no idea what it was based on.
 
-For very large already-extracted ChatGPT exports, an explicit local CLI processes numbered conversation shards and resolved assets from a validated directory. The HTTP API and extension do not accept arbitrary filesystem paths.
+**Moving between topics**
 
-## Privacy and user control
+One thing I noticed while actually using Memora was that long results can create another small problem: once you scroll through several detailed memory cards, you should not have to scroll all the way back just to search for something else.
 
-- The backend runs on loopback and stores imported memory in the configured local SQLite file.
-- Sensitive routes require a dedicated local bearer token. User scope is derived from backend `MEMORA_USER_ID`, not a request field.
-- The token is stored in the local Chrome profile; the OpenAI API key stays in the backend environment.
-- Import, retrieval, insertion, submission, and deletion are distinct explicit actions.
-- **Privacy & Memory** displays authenticated aggregate counts and can delete the configured user's active conversations, chunks, attachments, documents, fingerprints, and user row.
-- Deletion does not erase backups, copied databases, source exports, provider-held data, or text already inserted into ChatGPT.
+So the panel keeps the current search visible with **Showing memory for**.
 
-Local storage is not the same as exclusively local processing. Enhanced mode sends bounded content to configured OpenAI services. Memora does not claim end-to-end encryption, zero-knowledge processing, forensic secure erasure, or production identity.
+When you change the prompt in ChatGPT, **Search current prompt** lets you run a new retrieval using whatever is currently written in the composer. The old cards are replaced with the new results instead of piling up underneath them.
 
-## Enhanced and Local modes
+**Clear results** removes the current cards and resets the view.
 
-| Capability | Enhanced mode | Local mode |
-| --- | --- | --- |
-| Embeddings | OpenAI semantic embeddings | Deterministic local feature-hash embeddings |
-| MemoryFacts | OpenAI structured extraction with deterministic fallback | Deterministic local extraction |
-| MemoryBriefs | OpenAI structured synthesis with deterministic fallback | Deterministic local synthesis |
-| API key | Required | Not required |
-| Intended use | Best intended demo quality | Offline development, tests, and zero-cost evaluation |
+It does not delete your stored memory.
 
-The modes do not promise identical retrieval or synthesis quality. Changing embedding provider/model requires a compatible index or deliberate re-indexing. OpenAI semantic retrieval also requires an explicitly calibrated `MEMORA_RELEVANCE_MIN_SIMILARITY`; the launcher does not invent a universal value.
+That distinction matters. Clearing what you are looking at should not mean deleting the history Memora remembers.
 
-## Architecture
+You can also switch between **Best match** and **Most recent** depending on whether you care more about relevance or recency.
 
-Memora is a modular Python application behind a thin Chrome extension:
+**Memory beyond conversations**
 
-- `backend/ingestion`: JSON/ChatGPT imports, attachment recovery, PDF extraction, normalization, chunking.
-- `backend/rag`: embeddings, retrieval, reranking, MemoryThreads, MemoryFacts, temporal utility, synthesis, context construction.
-- `backend/database`: SQLite persistence and user-scoped lifecycle operations.
-- `backend/api`: FastAPI schemas, authentication, rate limits, sanitized errors, and service composition.
-- `extension`: ChatGPT adapter, panel, popup, typed runtime messaging, background service worker, API client, and privacy controls.
-- `scripts`: demo/evaluation utilities, timestamp backfill, calibration, and extracted-export import.
+Useful context is not always inside a chat message.
 
-The public API exposes unauthenticated `GET /health`; authenticated memory statistics, memory deletion, conversation import, ChatGPT export import, PDF import, and context retrieval routes.
+A project might depend on a PDF you uploaded months ago or an attachment that was part of an older ChatGPT conversation.
 
-## Why Memora is more than vector search
+Memora can recover supported attachment information from imported ChatGPT history and index text PDFs when the original file can be resolved safely. Supported PDF content becomes searchable alongside conversation history, and the source can keep page-level provenance so the result still points back to where the information came from.
 
-Memora still begins with embeddings and cosine similarity, but the product behavior comes from the stages after candidate retrieval:
+The goal is not to pretend every attachment can be understood.
 
-- lexical and entity-aware hybrid reranking;
-- conservative topic, subject, task, course, and version separation;
-- bounded fact extraction with salience and specificity;
-- explicit correction and current/historical handling;
-- per-thread synthesis instead of blending unrelated evidence;
-- backend-attached provenance and timestamps;
-- user review before context insertion.
+When Memora cannot safely resolve the actual content of an attachment, it keeps the metadata rather than guessing what was inside.
 
-These are implemented deterministic and provider-backed mechanisms, not a claim that the system has solved general memory reasoning.
+**Designed around user control**
 
-## Current MVP limitations
+Memora separates every important action.
 
-- Windows-first launcher and manual unpacked Chrome installation.
-- One ChatGPT DOM adapter whose selectors may require maintenance.
-- Local single-user capability token rather than production identity.
-- SQLite linear vector scan and synchronous import/indexing, intended for demo-scale use.
-- No encryption-at-rest guarantee, cloud deployment, background queue, telemetry, or analytics.
-- Enhanced query-time fact extraction and per-thread synthesis can add provider latency and cost.
-- Indirect prompt injection can be reduced but not eliminated.
-- Attachment recovery is deliberately conservative, and OCR is not implemented.
-- MemoryFacts and MemoryThreads are query-time objects rather than durable user-editable memory records.
-- No complete Memora-versus-basic-RAG benchmark or production-scale evaluation currently exists.
+Importing history is one action.
+
+Retrieving memory is another.
+
+Choosing **Use This Context** is another.
+
+Sending the final ChatGPT message is still your action.
+
+Deleting stored memory is separate again.
+
+That separation is intentional.
+
+I wanted Memora to help with continuity without taking control away from the person using it.
+
+The same idea applies when moving between searches. **Clear results** only clears the current result view. It does not delete stored conversations or documents.
+
+For users who want to remove stored memory, those controls live separately in **Privacy & Memory**.
+
+**Enhanced and Local modes**
+
+Memora can run in two processing modes.
+
+**Enhanced mode** uses configured OpenAI services for higher-quality semantic embeddings, MemoryFact extraction, and MemoryBrief synthesis.
+
+**Local mode** runs without requiring an API key and uses the implemented local and deterministic processing path.
+
+The experience is the same in the sense that you still retrieve memory, review it, and decide what to use, but the two modes do not promise identical retrieval or synthesis quality.
+
+**More than similarity search**
+
+A lot of retrieval systems are built around a simple question:
+
+"What old text looks most similar to this query?"
+
+That is useful, but it is not enough for the kind of memory I wanted Memora to provide.
+
+Two conversations can use the same language and still be about different projects.
+
+An old decision can be highly relevant while also being outdated.
+
+The most important piece of context might be a correction you made later.
+
+And sometimes what you need is not one old message at all, but the combination of a decision, a result, and the current status spread across multiple conversations.
+
+Memora starts with retrieval, but the useful part comes from what happens after that: separating related history, identifying the facts that matter for the current question, understanding how information changed over time, turning it into clear MemoryBriefs, and preserving where that information came from.
+
+The goal is not to remember everything.
+
+It is to help find the right part of your history at the moment you actually need it, show it to you clearly, and let you decide whether it should become part of the conversation you are having now.
