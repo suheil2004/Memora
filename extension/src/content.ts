@@ -7,12 +7,15 @@ import type { MemoryBrief } from "./api/types";
 import type { ContentControlRequest } from "./api/types";
 import { applyContextSnapshot, createMemorySnapshot } from "./context-insertion";
 import { friendlyRetrievalError } from "./retrieval-errors";
+import { LatestRequestGuard } from "./latest-request";
 
 const adapter = new ChatGptAdapter();
 let panel: MemoraPanel;
 let retrievedQuery = "";
+const retrievalRequests = new LatestRequestGuard();
 
 async function retrieveMemory(): Promise<void> {
+  const generation = retrievalRequests.begin();
   debug("CONTENT", "retrieve button clicked");
   try {
     if (!adapter.isSupportedPage()) throw new Error("This page is not supported by Memora.");
@@ -21,9 +24,11 @@ async function retrieveMemory(): Promise<void> {
     debug("CONTENT", "extracted query", { queryLength: query.length });
     panel.showLoading();
     const response = await requestMemoraContext(query);
+    if (!retrievalRequests.isCurrent(generation)) return;
     retrievedQuery = query;
-    panel.showResults(response);
+    panel.showResults(response, query);
   } catch (error) {
+    if (!retrievalRequests.isCurrent(generation)) return;
     debug("CONTENT", "retrieval error", error instanceof Error ? error.message : "unknown error");
     panel.showError(friendlyRetrievalError(error));
   }
@@ -49,7 +54,10 @@ function useRetrievedMemory(memory: MemoryBrief): void {
 }
 
 function start(): void {
-  panel = new MemoraPanel(() => void retrieveMemory(), useRetrievedMemory);
+  panel = new MemoraPanel(() => void retrieveMemory(), useRetrievedMemory, () => {
+    retrievalRequests.invalidate();
+    retrievedQuery = "";
+  });
   chrome.runtime.onMessage.addListener(handleControlMessage);
   if (!adapter.isSupportedPage()) {
     panel.showError("This page is not supported by Memora.");
@@ -63,6 +71,7 @@ function start(): void {
 
 function handleControlMessage(message: unknown): false {
   if (isMemoryClearedMessage(message)) {
+    retrievalRequests.invalidate();
     retrievedQuery = "";
     panel.clearMemories();
   }

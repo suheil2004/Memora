@@ -26,6 +26,10 @@ export class MemoraPanel {
   private readonly minimize: HTMLButtonElement;
   private readonly sortControl: HTMLElement;
   private readonly sortSelect: HTMLSelectElement;
+  private readonly resultsToolbar: HTMLElement;
+  private readonly displayedQueryElement: HTMLElement;
+  private readonly searchCurrentPrompt: HTMLButtonElement;
+  private readonly clearResultsButton: HTMLButtonElement;
   private readonly memoryButtons = new Map<string, HTMLButtonElement>();
   private readonly usedMemories = new Map<string, string>();
   private currentMemories: MemoryBrief[] = [];
@@ -36,8 +40,14 @@ export class MemoraPanel {
   private dragged = false;
   private loadingTimers: Array<ReturnType<typeof globalThis.setTimeout>> = [];
   private loadingGeneration = 0;
+  private displayedQuery = "";
+  private draftAvailable = false;
 
-  constructor(onRetrieve: () => void, private readonly onUseMemory: (memory: MemoryBrief) => void) {
+  constructor(
+    onRetrieve: () => void,
+    private readonly onUseMemory: (memory: MemoryBrief) => void,
+    private readonly onClearResults: () => void = () => undefined,
+  ) {
     cleanupActivePanel?.();
     document.getElementById("memora-extension-root")?.remove();
     const host = document.createElement("aside");
@@ -48,7 +58,11 @@ export class MemoraPanel {
       <section class="panel" id="memora-panel" aria-label="Memora relevant memories" hidden>
         <header><span class="brand-mark" aria-hidden="true"></span><div><strong>Memora</strong><span>Relevant memories</span></div><button type="button" id="memora-minimize" class="minimize" aria-label="Minimize Memora" title="Minimize Memora">&#8722;</button></header>
         <p id="memora-status" role="status" aria-live="polite">Relevant memories for your current question.</p>
-        <div class="sort-control" id="memora-sort-control" hidden><label for="memora-sort">Sort</label><select id="memora-sort" aria-label="Sort memories"><option value="best">Best match</option><option value="recent">Most recent</option></select></div>
+        <div class="results-toolbar" id="memora-results-toolbar" hidden>
+          <div class="query-label"><span>Showing memory for:</span><q id="memora-displayed-query"></q></div>
+          <div class="toolbar-actions"><button type="button" id="memora-search-current">Search current prompt</button><button type="button" id="memora-clear-results" class="secondary">Clear results</button></div>
+          <div class="sort-control" id="memora-sort-control"><label for="memora-sort">Sort</label><select id="memora-sort" aria-label="Sort memories"><option value="best">Best match</option><option value="recent">Most recent</option></select></div>
+        </div>
         <div id="memora-content" class="content"></div>
         <div class="actions"><button type="button" id="memora-retrieve" class="secondary">Retrieve memory</button></div>
       </section>`;
@@ -61,9 +75,18 @@ export class MemoraPanel {
     this.minimize = required(root, "#memora-minimize", HTMLButtonElement);
     this.sortControl = required(root, "#memora-sort-control", HTMLElement);
     this.sortSelect = required(root, "#memora-sort", HTMLSelectElement);
+    this.resultsToolbar = required(root, "#memora-results-toolbar", HTMLElement);
+    this.displayedQueryElement = required(root, "#memora-displayed-query", HTMLElement);
+    this.searchCurrentPrompt = required(root, "#memora-search-current", HTMLButtonElement);
+    this.clearResultsButton = required(root, "#memora-clear-results", HTMLButtonElement);
     this.position = defaultPosition();
     this.applyPosition();
     this.action.addEventListener("click", onRetrieve);
+    this.searchCurrentPrompt.addEventListener("click", onRetrieve);
+    this.clearResultsButton.addEventListener("click", () => {
+      this.clearResults();
+      this.onClearResults();
+    });
     this.bubble.addEventListener("click", () => {
       if (this.dragged) { this.dragged = false; return; }
       this.setExpanded(!this.expanded);
@@ -89,7 +112,11 @@ export class MemoraPanel {
     void this.restorePosition();
   }
 
-  setDraftAvailable(available: boolean): void { this.action.dataset.draftAvailable = String(available); }
+  setDraftAvailable(available: boolean): void {
+    this.draftAvailable = available;
+    this.action.dataset.draftAvailable = String(available);
+    this.searchCurrentPrompt.disabled = !available || this.status.dataset.state === "loading";
+  }
   showIdle(message = "Relevant memories for your current question."): void {
     this.currentMemories = [];
     delete this.bubble.dataset.hasMemories;
@@ -98,9 +125,12 @@ export class MemoraPanel {
   }
   showLoading(): void {
     this.clearLoadingTimers();
+    this.clearDisplayedQuery();
     this.currentMemories = [];
     delete this.bubble.dataset.hasMemories;
     this.action.disabled = true;
+    this.searchCurrentPrompt.disabled = true;
+    this.resetScroll();
     this.renderState("loading", LOADING_STAGE_MESSAGES[0]);
     const generation = this.loadingGeneration;
     // These deterministic elapsed-time messages reassure the user; they are
@@ -113,10 +143,12 @@ export class MemoraPanel {
     );
   }
   showError(message: string): void {
+    this.clearDisplayedQuery();
     this.currentMemories = [];
     delete this.bubble.dataset.hasMemories;
     this.action.disabled = false;
     this.action.textContent = "Try again";
+    this.searchCurrentPrompt.disabled = !this.draftAvailable;
     this.renderState("error", message);
   }
   showInsertionError(message: string): void {
@@ -143,15 +175,30 @@ export class MemoraPanel {
     this.action.disabled = false;
     this.action.textContent = "Retrieve memory";
     this.renderState("idle", "Memora data cleared. Retrieve after importing memory again.");
+    this.clearDisplayedQuery();
+    this.resetScroll();
   }
 
-  showResults(response: ContextResponse): void {
+  clearResults(): void {
+    this.currentMemories = [];
+    this.usedMemories.clear();
+    delete this.bubble.dataset.hasMemories;
+    this.action.disabled = false;
+    this.action.textContent = "Retrieve memory";
+    this.clearDisplayedQuery();
+    this.renderState("idle", "Relevant memories for your current question.");
+    this.resetScroll();
+  }
+
+  showResults(response: ContextResponse, query = response.query): void {
     this.action.disabled = false;
     this.action.textContent = "Retrieve again";
+    this.searchCurrentPrompt.disabled = !this.draftAvailable;
     if (response.memories.length === 0) {
       this.currentMemories = [];
       delete this.bubble.dataset.hasMemories;
       this.renderState("empty", "No relevant memory found for this question.");
+      this.clearDisplayedQuery();
       return;
     }
     const memories = response.memories.slice(0, 5);
@@ -163,8 +210,13 @@ export class MemoraPanel {
       partial ? "partial" : "results",
       partial ? "Relevant memories found. Some details used a local fallback." : "Relevant memories found.",
     );
+    this.displayedQuery = query;
+    this.displayedQueryElement.textContent = query;
+    this.displayedQueryElement.title = query;
+    this.resultsToolbar.hidden = false;
     this.sortControl.hidden = false;
     this.renderCards();
+    this.resetScroll();
   }
 
   private renderCards(): void {
@@ -241,6 +293,7 @@ export class MemoraPanel {
     this.content.replaceChildren();
     this.memoryButtons.clear();
     this.sortControl.hidden = true;
+    this.resultsToolbar.hidden = true;
     this.status.dataset.state = state;
     this.status.textContent = message;
   }
@@ -320,6 +373,15 @@ export class MemoraPanel {
     this.loadingTimers.forEach((timer) => globalThis.clearTimeout(timer));
     this.loadingTimers = [];
   }
+
+  private clearDisplayedQuery(): void {
+    this.displayedQuery = "";
+    this.displayedQueryElement.textContent = "";
+    this.displayedQueryElement.removeAttribute("title");
+    this.resultsToolbar.hidden = true;
+  }
+
+  private resetScroll(): void { this.panel.scrollTop = 0; }
 }
 
 function defaultPosition(): BubblePosition {
@@ -418,7 +480,10 @@ const STYLE = `<style>
   .minimize { width:30px; height:30px; min-height:0; padding:0; border:0; border-radius:8px; background:transparent; color:var(--muted); font-size:20px; line-height:1; } .minimize:hover { background:#f5f5f5; color:var(--text); }
   .brand-mark { width:8px; height:8px; border:1.5px solid #333; border-radius:50%; background:transparent; }
   #memora-status { margin:0 0 14px; color:var(--muted); font-size:13px; overflow-wrap:anywhere; } #memora-status[data-state=error]{color:var(--danger)} #memora-status[data-state=empty]{color:var(--warning)}
-  .sort-control { display:flex; align-items:center; justify-content:flex-end; gap:8px; margin:-4px 0 12px; color:var(--subtle); font-size:12px; } .sort-control[hidden] { display:none; } .sort-control select { min-height:30px; padding:4px 26px 4px 8px; border:1px solid #dadada; border-radius:8px; background:#fff; color:#222; font:500 12px/1 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; } .sort-control select:focus-visible { outline:2px solid #262626; outline-offset:2px; }
+  .results-toolbar { position:sticky; top:-16px; z-index:3; display:grid; gap:8px; margin:0 -4px 12px; padding:10px 4px; border-bottom:1px solid var(--divider); background:var(--bg); box-shadow:0 4px 8px rgba(255,255,255,.92); } .results-toolbar[hidden] { display:none; }
+  .query-label { display:grid; gap:2px; min-width:0; } .query-label span { color:var(--subtle); font-size:11px; font-weight:600; } .query-label q { display:-webkit-box; overflow:hidden; color:var(--text); font-size:12px; line-height:1.35; overflow-wrap:anywhere; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+  .toolbar-actions { display:flex; flex-wrap:wrap; gap:7px; } .toolbar-actions button { flex:1 1 135px; min-height:34px; padding:6px 9px; font-size:12px; }
+  .sort-control { display:flex; align-items:center; justify-content:flex-end; gap:8px; color:var(--subtle); font-size:12px; } .sort-control[hidden] { display:none; } .sort-control select { min-height:30px; padding:4px 26px 4px 8px; border:1px solid #dadada; border-radius:8px; background:#fff; color:#222; font:500 12px/1 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; } .sort-control select:focus-visible { outline:2px solid #262626; outline-offset:2px; }
   .content { display:grid; gap:12px; } .memory-card { display:grid; gap:9px; padding:12px; border:1px solid var(--border); border-radius:11px; background:var(--bg); }
   .memory-card:first-child { border-color:#d9d9d9; }
   .card-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; } .card-heading strong { color:var(--text); font-size:14px; font-weight:600; overflow-wrap:anywhere; }

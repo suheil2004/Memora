@@ -38,6 +38,10 @@ function elements() {
     minimize: root.querySelector<HTMLButtonElement>("#memora-minimize")!,
     sort: root.querySelector<HTMLSelectElement>("#memora-sort")!,
     sortControl: root.querySelector<HTMLElement>("#memora-sort-control")!,
+    toolbar: root.querySelector<HTMLElement>("#memora-results-toolbar")!,
+    displayedQuery: root.querySelector<HTMLElement>("#memora-displayed-query")!,
+    searchCurrent: root.querySelector<HTMLButtonElement>("#memora-search-current")!,
+    clearResults: root.querySelector<HTMLButtonElement>("#memora-clear-results")!,
     uses: root.querySelectorAll<HTMLButtonElement>("article button:not(.link-button)"),
   };
 }
@@ -71,6 +75,7 @@ describe("polished Memora panel states", () => {
     expect(ui.bubble.style.left).toBe("876px");
     expect(Number.parseInt(ui.bubble.style.top)).toBeGreaterThan(250);
     expect(Number.parseInt(ui.bubble.style.top)).toBeLessThan(500);
+    expect(ui.toolbar.hidden).toBe(true);
   });
 
   it("uses the premium white full-brand trigger treatment", () => {
@@ -200,6 +205,79 @@ describe("polished Memora panel states", () => {
     expect(ui.uses).toHaveLength(1);
     expect(ui.retrieve.textContent).toBe("Retrieve again");
     expect(ui.root.textContent).toContain("Discussed Jan 2026");
+    expect(ui.toolbar.hidden).toBe(false);
+    expect(ui.displayedQuery.textContent).toBe(response.query);
+    expect(ui.displayedQuery.title).toBe(response.query);
+  });
+
+  it("keeps the successful query sticky while the live draft changes", () => {
+    const retrieve = vi.fn();
+    const panel = new MemoraPanel(retrieve, vi.fn());
+    panel.setDraftAvailable(true);
+    panel.showResults(response, "Tell me about my drone detection project");
+    let ui = elements();
+    expect(ui.displayedQuery.textContent).toBe("Tell me about my drone detection project");
+    panel.setDraftAvailable(true);
+    expect(ui.displayedQuery.textContent).toBe("Tell me about my drone detection project");
+    expect((ui.root.querySelector("style")?.textContent ?? "")).toContain("position:sticky");
+    ui.searchCurrent.click();
+    expect(retrieve).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaces cards, resets scrolling, and disables repeated search while loading", () => {
+    const panel = new MemoraPanel(vi.fn(), vi.fn());
+    panel.setDraftAvailable(true);
+    panel.showResults(response);
+    let ui = elements();
+    ui.panel.scrollTop = 240;
+    panel.showLoading();
+    ui = elements();
+    expect(ui.panel.scrollTop).toBe(0);
+    expect(ui.searchCurrent.disabled).toBe(true);
+    expect(ui.root.textContent).not.toContain("Drone Detection Project");
+    panel.showResults({ ...response, query: "Plan an event", memories: [{ ...response.memories[0], thread_id: "event", title: "Event planning" }] });
+    ui = elements();
+    expect(ui.root.textContent).toContain("Event planning");
+    expect(Array.from(ui.root.querySelectorAll(".card-heading strong"), (node) => node.textContent))
+      .toEqual(["Event planning"]);
+    expect(ui.displayedQuery.textContent).toBe("Plan an event");
+  });
+
+  it("does not request an empty current prompt and clears results non-destructively", () => {
+    const retrieve = vi.fn();
+    const clear = vi.fn();
+    const use = vi.fn();
+    const panel = new MemoraPanel(retrieve, use, clear);
+    panel.setDraftAvailable(false);
+    panel.showResults(response);
+    let ui = elements();
+    expect(ui.searchCurrent.disabled).toBe(true);
+    ui.searchCurrent.click();
+    expect(retrieve).not.toHaveBeenCalled();
+    ui.panel.scrollTop = 180;
+    ui.clearResults.click();
+    ui = elements();
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(retrieve).not.toHaveBeenCalled();
+    expect(use).not.toHaveBeenCalled();
+    expect(ui.toolbar.hidden).toBe(true);
+    expect(ui.root.querySelectorAll("article.memory-card")).toHaveLength(0);
+    expect(ui.status.dataset.state).toBe("idle");
+    expect(ui.panel.scrollTop).toBe(0);
+  });
+
+  it("keeps sorting functional after a repeated retrieval", () => {
+    const panel = new MemoraPanel(vi.fn(), vi.fn());
+    const older = { ...response.memories[0], thread_id: "older", title: "Older best", latest_timestamp: "2025-01-01T00:00:00Z" };
+    const newer = { ...response.memories[0], thread_id: "newer", title: "Newer related", latest_timestamp: "2026-06-01T00:00:00Z" };
+    panel.showResults(response);
+    panel.showLoading();
+    panel.showResults({ ...response, query: "Newest prompt", memories: [older, newer] });
+    const ui = elements();
+    ui.sort.value = "recent";
+    ui.sort.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(Array.from(ui.root.querySelectorAll(".card-heading strong"), (node) => node.textContent))
+      .toEqual(["Newer related", "Older best"]);
   });
 
   it("defaults to best match and reorders existing cards by trusted timestamp", () => {
