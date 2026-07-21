@@ -1,186 +1,187 @@
 # Setting Up Memora
 
-Memora is a Windows-oriented, developer-operated hackathon MVP. The launcher prepares the local project and starts the backend; Chrome still requires one manual unpacked-extension installation.
+Memora is currently a Windows-first, developer-operated hackathon MVP. The launcher prepares the repository and runs the local backend; Chrome requires one manual unpacked-extension installation.
 
-## Fast setup
-
-### Prerequisites
+## Prerequisites
 
 - Windows with Windows PowerShell 5.1 or newer PowerShell
 - Python 3.11 or newer
 - Node.js 20 or newer with npm
 - Google Chrome
-- An OpenAI API key only when an OpenAI embedding, MemoryFact, or synthesis provider is selected
+- An OpenAI API key only for Enhanced mode
 
-The launcher does not install system software, Chrome, Python, or Node.js.
+The launcher validates but does not install system runtimes or Chrome.
 
-### First run
+## Clone and launch
 
-1. Clone or download Memora and open PowerShell in the repository root.
-2. Run:
+Open PowerShell in the repository root and run:
 
-   ```powershell
-   .\start-memora.ps1
-   ```
+```powershell
+.\start-memora.ps1
+```
 
-3. The launcher checks Python, Node, and npm; creates `.venv` if needed; and installs project-local Python and locked extension dependencies when missing.
-4. On first setup without provider configuration, choose a processing mode. Pressing Enter selects **Enhanced**.
-5. The launcher generates a stable Memora token, builds `extension/dist`, starts FastAPI on `127.0.0.1:8765`, and verifies authenticated readiness.
-6. On first token generation, it stores the token in the gitignored `.env` and copies it to the clipboard without printing it.
-7. Keep the launcher window open. Closing it or pressing Ctrl+C stops the local backend.
+On first run, the launcher:
+
+1. Finds and validates Python, Node.js, and npm, including paths containing spaces.
+2. Creates `.venv` when absent or repairs missing/inconsistent Python dependencies with `python -m pip install -e .`.
+3. Installs locked extension dependencies when needed.
+4. Prompts for **Enhanced** or **Local** mode when no provider configuration exists.
+5. Creates and persists a stable local authentication token if one does not exist.
+6. Builds `extension/dist` when required and verifies all production files.
+7. Starts FastAPI on `http://127.0.0.1:8765`.
+8. Verifies readiness through authenticated memory statistics.
+
+Keep the launcher window open. Press Ctrl+C or close it to stop the backend.
+
+### Launcher options
+
+```powershell
+.\start-memora.ps1 -Setup             # review/change processing mode, then exit after setup
+.\start-memora.ps1 -RebuildExtension  # force a production extension rebuild
+.\start-memora.ps1 -ShowToken         # deliberately display the local token
+.\start-memora.ps1 -Verbose           # show bounded diagnostics
+```
+
+Normal launches reuse the existing `.venv`, provider configuration, database URL, API key, relevance threshold, and valid token. They do not rotate or overwrite them.
 
 ## Choose a processing mode
 
-### Enhanced — Recommended
+### Enhanced mode
 
-This is the recommended full Memora experience. It uses the existing OpenAI pipeline for semantic embeddings, query-time MemoryFact extraction, and MemoryBrief synthesis. It requires an OpenAI API key and is intended to provide the best Memora quality.
+Enhanced mode configures OpenAI semantic embeddings, OpenAI MemoryFact extraction, and OpenAI MemoryBrief synthesis, each with deterministic fallback where implemented. It is the recommended full demo experience and requires an OpenAI API key.
 
-If `OPENAI_API_KEY` is absent, enter it at the hidden prompt. Saving is opt-in: the launcher explains that `.env` is local plaintext excluded from Git and defaults to using the key only for the current launch. The key is never printed or copied to the clipboard.
+If no key is configured, the launcher requests it through a hidden prompt. Saving it to the gitignored plaintext `.env` is explicit and optional; otherwise it applies only to that launch.
 
-OpenAI semantic embeddings also require an explicitly measured `MEMORA_RELEVANCE_MIN_SIMILARITY`. The repository does not claim a universal threshold. Enter a value calibrated for the intended compatible index or stop and use `scripts.calibrate_relevance` for diagnostic guidance. The launcher validates and persists the non-secret threshold but never invents one.
+OpenAI embeddings require a calibrated `MEMORA_RELEVANCE_MIN_SIMILARITY`. The launcher validates and may save the value but does not choose one. The diagnostic calibration utility is:
 
-### Local
+```powershell
+.\.venv\Scripts\python.exe -m scripts.calibrate_relevance
+```
 
-Local mode uses local feature-hash embeddings plus deterministic MemoryFacts and MemoryBriefs. No OpenAI API key is needed. It is useful for offline testing, development, and zero-cost evaluation; retrieval and summaries may differ from Enhanced mode.
+Calibration and live OpenAI use can consume provider quota. Do not run them unless intended.
 
-The selected provider configuration persists in `.env`. Normal launches display the active mode and do not prompt again.
+### Local mode
 
-## Install the Chrome extension once
+Local mode uses deterministic feature-hash embeddings, deterministic MemoryFacts, and deterministic MemoryBriefs. It requires no API key and is intended for offline development, tests, and zero-cost evaluation. Its retrieval and synthesis quality may differ from Enhanced mode.
 
-The hackathon MVP is not distributed through the Chrome Web Store:
+Changing embedding provider or model requires a compatible database or deliberate re-indexing. The launcher warns before changing mode against a populated SQLite database and never deletes or rewrites it automatically.
+
+## Install the Chrome extension
+
+After the launcher has built the extension:
 
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Select **Load unpacked**.
-4. Choose the repository's `extension/dist` directory.
+4. Choose `<repository>\extension\dist`.
 5. Open the Memora toolbar popup.
-6. Keep `http://127.0.0.1:8765` as the backend URL.
-7. Paste the Memora token copied by the launcher and save.
-8. Confirm the popup reports **Ready** or **No memory imported yet**.
+6. Keep the backend URL as `http://127.0.0.1:8765`.
+7. Paste the local authentication token copied on first generation and select **Save settings**.
+8. Confirm **Ready** or **No memory imported yet**.
 
-After rebuilding extension source, click **Reload** for Memora and refresh the ChatGPT tab.
+The Memora token is not the OpenAI API key. It authorizes the local extension-to-backend API only.
 
-## Import ChatGPT history
+After any extension rebuild, select **Reload** for Memora in `chrome://extensions` and refresh the ChatGPT tab. Chrome does not automatically load new files from `extension/dist` into an already running extension instance.
 
-Use the popup to select a supported ChatGPT JSON/ZIP export. Memora does not automatically access the account. Compatible exports can conservatively reconnect historical attachment metadata and safely resolvable text PDFs; ambiguous assets remain metadata-only.
+## Import memory
 
-For a very large already-extracted export, stop the backend and use the local incremental CLI with the same `.env` configuration:
+### ChatGPT history
 
-```powershell
-.\.venv\Scripts\python.exe -m scripts.import_chatgpt_export "<export-directory>"
-```
+1. Export your ChatGPT data through ChatGPT's supported export process.
+2. Open the Memora popup.
+3. Under **Import memory**, select the supported JSON or ZIP export files.
+4. Select **Import history** and wait for the local import summary.
 
-Do not place private exports or databases in the repository.
+Memora does not access the ChatGPT account automatically. ZIPs are inspected in memory rather than extracted. Compatible exports may recover attachment metadata and safely resolvable text PDFs; ambiguous or missing assets remain metadata-only.
 
-## Daily use
+### Additional PDFs
 
-After initial setup:
+Use **Import additional PDFs** for up to the configured file limit of text-based PDF files. Memora extracts text locally, indexes bounded page chunks, and preserves filename/page provenance. OCR, scanned/image-only PDFs, and encrypted PDFs are not supported.
 
-1. Run `.\start-memora.ps1`.
-2. Open ChatGPT.
-3. Use the Memora panel.
+## Use Memora
 
-The persisted token is reused; it does not need to be regenerated or pasted every session. If Memora is already running with the configured token, the launcher reports that state instead of starting a duplicate process.
+1. Open `https://chatgpt.com/` and start a fresh conversation.
+2. Write a question without submitting it.
+3. Open the Memora panel and select **Retrieve memory**.
+4. Review the MemoryBrief cards, timestamps, and sources.
+5. Use **Best match** or **Most recent** as needed.
+6. For another draft, use **Search current prompt**; it reads the composer at click time and replaces the visible results.
+7. **Clear results** removes only panel results and makes no deletion request.
+8. Select **Use This Context** for one brief, review the resulting draft, and submit manually.
 
-## Launcher flags
+If the draft changes between retrieval and insertion, Memora refuses insertion and asks for another retrieval.
 
-| Flag | Behavior |
-| --- | --- |
-| `-Setup` | Review or change processing mode, prepare configuration/dependencies/build, then exit without starting FastAPI. |
-| `-RebuildExtension` | Force a production extension rebuild. |
-| `-ShowToken` | Intentionally display the configured Memora token for manual recovery. Avoid screen sharing or logging this output. |
-| `-Verbose` | Show additional command/diagnostic information when setup or startup fails. Secrets are still not intentionally printed. |
+## Privacy & Memory
 
-Examples:
+The popup shows authenticated aggregate counts for conversations, attachments, searchable documents, conversation chunks, and document chunks.
 
-```powershell
-.\start-memora.ps1 -Setup
-.\start-memora.ps1 -RebuildExtension
-.\start-memora.ps1 -ShowToken
-```
+**Clear Memora data** requires confirmation and deletes the configured user's records from the active SQLite database. It does not delete source exports, copied databases, backups, provider-held data, or text already inserted into ChatGPT.
 
-## Local configuration
+## Future runs and stopping
 
-The backend does not load `.env` itself. The launcher parses the root `.env` as data and exports only supported `KEY=VALUE` entries to its backend child process. Blank lines and `#` comment lines are allowed; PowerShell expressions are never executed. Existing process environment values take precedence. Valid existing provider/model/key/threshold configuration is respected without prompting or overwriting it during normal startup.
-
-`.env` and `.env.*` are gitignored except for the placeholder-only `.env.example`. The launcher preserves existing values and does not overwrite a configured database or rotate a valid token. Non-provider defaults include:
-
-```dotenv
-MEMORA_DATABASE_URL=sqlite:///./memora.sqlite3
-MEMORA_USER_ID=demo-user
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-MEMORA_SYNTHESIS_MODEL=gpt-5.6-luna
-```
-
-Enhanced writes `openai` to the existing embedding, synthesis, and fact provider variables. Local writes `local`, `deterministic`, and `deterministic`. The client never selects `MEMORA_USER_ID`; scope remains server-derived.
-
-### Changing mode safely
-
-Run `.\start-memora.ps1 -Setup`. The launcher shows the current mode and keeps it by default. If a requested change switches embedding providers while the configured database file contains data, Memora warns that compatible re-indexing is required and defaults to cancelling the switch. Explicit confirmation changes configuration only: it never edits or deletes the database, embeddings, conversations, documents, token, or source history. Existing backend provider/model/dimension checks still reject incompatible vectors. Use a new database or deliberately re-index user-supplied history before retrieval in the new embedding space.
-
-## Readiness states
-
-- **Ready:** authenticated backend is running and memory exists.
-- **No memory imported yet:** backend and token work; import history through the popup.
-- **Authentication failed:** the popup token does not match the stable `MEMORA_LOCAL_TOKEN` in `.env` or the launch environment.
-- **Memora is offline:** run the launcher and keep its window open.
-- **Configuration unavailable:** review provider names, API-key availability, semantic relevance threshold, database URL, and embedding compatibility.
-
-The launcher and popup use authenticated `GET /api/v1/memory/stats`. This does not call retrieval, embeddings, MemoryFact extraction, or synthesis.
-
-## Troubleshooting
-
-### Python, Node, or npm is missing
-
-Install the required supported runtime, reopen PowerShell so it is on `PATH`, and run the launcher again. The launcher never installs system runtimes.
-
-### Port 8765 is already in use
-
-If the authenticated Memora instance matches, the launcher reports it as already running. If another Memora token or another process owns the port, stop or reconfigure that process. The launcher never kills an unrelated process.
-
-### Extension does not appear
-
-Confirm `extension/dist` is loaded—not the `extension` source directory. After a rebuild, reload Memora in `chrome://extensions` and refresh ChatGPT.
-
-### Token mismatch
-
-Run `.\start-memora.ps1 -ShowToken` only when it is safe to display the token, then paste that exact value into the popup. Normal launches never print it.
-
-### OpenAI key is missing
-
-Enhanced or another OpenAI-backed configuration prompts with hidden input. Saving is optional and explicit. A saved key is plaintext in the local gitignored `.env`; it is never copied to the clipboard. Local mode never asks for one.
-
-### Backend closes
-
-The backend intentionally belongs to the launcher session. Keep the launcher open; it does not install a background service.
-
-### Readiness times out
-
-Run with `-Verbose`, verify provider and database configuration, and confirm local security software is not blocking loopback. The startup wait is bounded to 30 seconds.
-
-## Manual developer setup
-
-Advanced users can bypass the launcher:
+Start Memora from the repository root each time:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e .
+.\start-memora.ps1
+```
 
-$env:MEMORA_DATABASE_URL = "sqlite:///./memora.sqlite3"
-$env:MEMORA_USER_ID = "demo-user"
-$env:MEMORA_EMBEDDING_PROVIDER = "local"
-$env:MEMORA_SYNTHESIS_PROVIDER = "deterministic"
-$env:MEMORA_FACT_PROVIDER = "deterministic"
-$env:MEMORA_LOCAL_TOKEN = [Convert]::ToHexString(
-  [Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
-).ToLowerInvariant()
+If an authenticated matching backend is already running, the launcher reports it rather than starting another process. It refuses to kill a process using port 8765.
+
+For a backend started by the launcher, press Ctrl+C or close the launcher window to stop it.
+
+## Test the installation
+
+The automated suites use local or mocked providers and do not call OpenAI:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m compileall backend scripts tests
 
 Set-Location extension
-npm ci
+npm run test
+npm run typecheck
 npm run build
 Set-Location ..
 
-.\.venv\Scripts\python.exe -m uvicorn backend.api.app:app --host 127.0.0.1 --port 8765
+& 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' `
+  -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\test_start_memora_launcher.ps1
 ```
 
-Manual shell variables are not persisted automatically. Never bind this MVP to `0.0.0.0`, expose it to a LAN/public network, or place credentials in extension code.
+## Troubleshooting
+
+### Python or Node.js is not found
+
+Run `python --version`, `node --version`, and `npm.cmd --version` directly. Ensure supported executables are on `PATH`, then reopen PowerShell. The launcher distinguishes missing executables, invocation failures, malformed versions, and unsupported versions.
+
+### `.venv` exists but dependencies are missing
+
+Run the launcher again. It validates Memora distribution metadata and required runtime imports, then repairs an incomplete environment automatically. Use `-Verbose` for bounded stage diagnostics.
+
+### Extension build fails
+
+Run with `-Verbose`. npm commands execute from `extension/`, and a successful build must contain `background.js`, `content.js`, `popup.js`, `popup.html`, `popup.css`, and `manifest.json` in `extension/dist`.
+
+### Backend is offline
+
+Run `.\start-memora.ps1` from the repository root and keep its window open. Confirm port 8765 is not occupied by an unrelated process.
+
+### Authentication failed
+
+The popup token does not match the backend's stable `MEMORA_LOCAL_TOKEN`. When it is safe to display the credential, run `.\start-memora.ps1 -ShowToken`, paste that exact token into the popup, and save.
+
+### Wrong or incompatible database
+
+Check `MEMORA_DATABASE_URL` and the active provider/model. Memora rejects vectors created in an incompatible embedding space. It does not migrate, clear, or re-index a populated database automatically.
+
+### Configuration unavailable
+
+Check the selected provider names, OpenAI key for Enhanced mode, calibrated relevance threshold, database URL, and embedding compatibility. Authenticated readiness does not itself invoke embeddings or synthesis.
+
+### Extension changes do not appear
+
+Run `.\start-memora.ps1 -RebuildExtension`, reload Memora in `chrome://extensions`, and refresh ChatGPT. Confirm Chrome is loading `extension/dist`, not the source directory.
+
+## Manual developer startup
+
+The launcher is the supported project path. Advanced users may start components manually, but must provide the same environment variables and must keep the backend bound to loopback. Never expose this MVP using `0.0.0.0` or place provider credentials in extension code.

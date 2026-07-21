@@ -1,40 +1,40 @@
 # Security Policy
 
-## Supported Versions
+## Supported version
 
-Memora is currently an active MVP and hackathon project. Security updates are applied to the latest version of the codebase.
+Memora is an active local-first hackathon MVP. Security fixes apply to the latest code on the default branch; older commits and informal builds are not supported releases.
 
-| Version | Supported |
-| ------- | --------- |
-| Latest code on `main` | ✅ |
-| Older commits or releases | ❌ |
+## Reporting a vulnerability
 
-## Reporting a Vulnerability
+Please use GitHub Private Vulnerability Reporting for this repository. Do not publish proof-of-concept details, API keys, Memora tokens, conversation content, database files, exports, or other sensitive data in a public issue.
 
-If you discover a security vulnerability in Memora, please report it privately using GitHub's **Private Vulnerability Reporting** feature for this repository.
+Include the affected component, reproduction steps using synthetic data, expected impact, and any suggested remediation. Reports will be reviewed as availability permits; an initial response is targeted within five business days but is not guaranteed by a formal service-level agreement.
 
-Please do not open a public GitHub issue containing sensitive vulnerability details, proof-of-concept exploits, API keys, tokens, private user data, or other confidential information.
+## Current security boundary
 
-When submitting a report, please include:
+The current design is a single-user local application:
 
-- A clear description of the vulnerability
-- The affected component or feature
-- Steps to reproduce the issue
-- The potential security impact
-- Any suggested remediation, if known
+- FastAPI is launched on `127.0.0.1:8765`.
+- Sensitive API routes require one dedicated local bearer token.
+- API callers cannot select `user_id`; scope comes from backend configuration.
+- The extension permits only the fixed localhost backend and keeps the OpenAI key out of extension code and storage.
+- Imports, queries, context output, archives, and PDF processing are bounded.
+- Validation and general API errors are sanitized.
+- Retrieved history is treated as untrusted evidence, and trusted provenance is attached by backend code.
+- Retrieval, context insertion, ChatGPT submission, import, and deletion remain separate user actions.
 
-I will review security reports as soon as reasonably possible and aim to provide an initial response within 5 business days.
+These controls do not make Memora production-ready. The shared local token is capability-style authentication, in-process rate limits are not durable, SQLite and saved local credentials are not encrypted by Memora, and loopback HTTP does not provide TLS. Do not expose the MVP to a LAN or public network.
 
-If the vulnerability is confirmed, I will work to address the issue and may publish a security advisory once an appropriate fix is available.
+## Important residual risks
 
-If a report is determined not to represent a security vulnerability, I will provide an explanation where possible.
+- Historical content can contain indirect prompt injection. Bounded evidence, delimiters, synthesis isolation, and explicit insertion reduce but do not eliminate that risk.
+- Anyone with access to the workstation, Chrome profile, local token, `.env`, database, exports, or backups may gain sensitive access.
+- Deletion clears the configured user's active database rows; it cannot erase manual copies, backups, snapshots, provider retention, or text already inserted into ChatGPT.
+- ChatGPT DOM changes can break or alter extension behavior.
+- Dependency and advisory results are point-in-time observations, not ongoing guarantees.
 
-## Security Scope
+Before public or multi-user deployment, Memora would require production identity and session management, token rotation/revocation, TLS, explicit network policy, durable quotas, tenant isolation, managed secrets and encryption, backup/retention controls, operational monitoring, and a formal prompt-injection policy.
 
-Memora is currently designed as a local-first MVP using a Chrome extension and a backend bound to `127.0.0.1`.
+## Responsible disclosure
 
-The current MVP should not be treated as production-ready for public or multi-user deployment without additional security controls, including production authentication, encrypted storage and key management, TLS, durable rate limiting, tenant isolation, and operational monitoring.
-
-## Responsible Disclosure
-
-Please allow reasonable time for a confirmed vulnerability to be investigated and addressed before publicly disclosing technical details.
+Please allow reasonable time for investigation and remediation before public disclosure. Confirmed issues may be documented through a security advisory after a fix is available.
