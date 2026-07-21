@@ -9,16 +9,20 @@ Assumptions:
 - The repository is cloned and Python dependencies are installed.
 - The presenter has prepared a private local demo database using synthetic or sanitized data; it is never committed.
 - `extension/dist` is already built and loaded unpacked in Chrome.
-- A supported embedding/synthesis provider and private API key are configured in the backend shell.
+- **Enhanced mode** is configured: OpenAI semantic embeddings, OpenAI MemoryFact extraction, and OpenAI MemoryBrief synthesis, with a private API key and a relevance floor calibrated for the prepared demo index.
 - The same dedicated `MEMORA_LOCAL_TOKEN` is configured in the backend and extension popup.
 
 ### 1. Start the backend
 
-From the repository root, with the prepared environment still configured:
+From the repository root, with the prepared local `.env` and database, run the one-command launcher:
 
 ```powershell
-python -m uvicorn backend.api.app:app --host 127.0.0.1 --port 8765
+.\start-memora.ps1
 ```
+
+The launcher validates runtimes and configuration, reuses local dependencies and the stable token, prepares a stale/missing extension build, refuses port conflicts, starts only on `127.0.0.1:8765`, and checks authenticated readiness. For first-time installation and all supported flags, see [SETUP.md](SETUP.md).
+
+The judged path uses **Enhanced** because it is the recommended full Memora experience. Local mode remains available for deterministic, offline, and zero-cost evaluation; the two modes should not be presented as equivalent output quality.
 
 Open the extension popup. Expected: **Ready**. Other states are actionable:
 
@@ -51,6 +55,8 @@ Use the repository's synthetic drone fixture and ask:
 Expected: **Drone Detection Project**, Raspberry Pi 4 camera streaming, and Windows laptop CUDA inference.
 
 ## B. Full local setup
+
+The canonical launcher path is documented in [SETUP.md](SETUP.md). The commands below remain a manual/developer alternative for judges who want to inspect every step.
 
 ### Requirements
 

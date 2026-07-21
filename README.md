@@ -113,6 +113,8 @@ During retrieval, the panel calmly changes elapsed-time feedback from **Searchin
 
 This hackathon MVP is developer-operated: it requires a local FastAPI service, Chrome extension, local environment configuration, and supported embedding/synthesis provider configuration. It is not a consumer installer. Production packaging is roadmap work.
 
+**Windows setup:** clone the repository and run `.\start-memora.ps1`. On first launch, choose **Enhanced** (recommended for the full OpenAI-backed Memora experience) or **Local** (no API key; intended for offline testing and development). See the canonical [setup guide](docs/SETUP.md) for calibration, extension installation, daily use, flags, and troubleshooting.
+
 For the fastest prepared demo, follow [docs/judge-quickstart.md](docs/judge-quickstart.md). Judges can inspect the repository and run all deterministic tests without private history or live OpenAI calls.
 
 ### Local setup summary
@@ -197,6 +199,7 @@ The controlled MVP uses a localhost-only backend, dedicated bearer authenticatio
 ## Additional resources
 
 - [Architecture](docs/architecture.md)
+- [Setup guide](docs/SETUP.md)
 - [Technical overview](docs/technical-overview.md)
 - [Submission description](docs/submission-description.md)
 - [Demo video script](docs/demo-video-script.md)
